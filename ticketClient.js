@@ -3,17 +3,16 @@ const axios = require('axios');
 require('dotenv').config();
 
 const HELP_DESK_URL      = process.env.HELPDESK_API_URL;      // e.g. https://helpdesk.newlink-group.com/api/v1
-const HELP_DESK_TOKEN    = process.env.HELPDESK_TOKEN;        // Your personal access token
-const HELP_DESK_GROUP_ID = process.env.HELPDESK_DEFAULT_GROUP || '1';
+const HELP_DESK_TOKEN    = process.env.HELP_DESK_TOKEN;       // Your personal access token
+const HELP_DESK_GROUP_ID = process.env.HELP_DESK_DEFAULT_GROUP || '1';
 
 if (!HELP_DESK_URL || !HELP_DESK_TOKEN) {
   throw new Error('Missing HELP_DESK_API_URL or HELP_DESK_TOKEN in env vars');
 }
 
 /**
- * Crea un ticket en Zammad.
- * Solo añadimos console.log para debug, no cambiamos la lógica de reintentos ni
- * transformaciones de error.
+ * Crea un ticket en Zammad “on behalf” del usuario (header From),
+ * manteniendo los console.log para debug.
  */
 async function createTicket({ title, description, userName, userEmail }) {
   console.log('[ticketClient] ⚙️ createTicket()', { title, userName, userEmail });
@@ -35,9 +34,8 @@ async function createTicket({ title, description, userName, userEmail }) {
     article: {
       subject:      title,
       body:         description,
-      type:         "email",      // treat as incoming customer email
-      //sender:       "Customer",   // ← tells Zammad it’s a customer‐sent email
-      internal:     false,        // visible externally (customer + agents)
+      type:         "email",      // incoming customer email
+      internal:     false,        // visible to both customer & agents
       content_type: "text/html"   // or "text/plain"
     }
   };
@@ -53,7 +51,8 @@ async function createTicket({ title, description, userName, userEmail }) {
       {
         headers: {
           Authorization: `Token token=${HELP_DESK_TOKEN}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          From: userEmail     // <-- Run the request on behalf of this user
         }
       }
     );
@@ -65,7 +64,7 @@ async function createTicket({ title, description, userName, userEmail }) {
       err.response?.status,
       err.response?.data || err.message
     );
-    // Rethrow the original error so your bot can handle it as before
+    // Rethrow so bot.js can handle the error as before
     throw err;
   }
 }
