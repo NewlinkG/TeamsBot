@@ -57,13 +57,13 @@ class TeamsBot extends ActivityHandler {
     const lang   = detectLanguageFromLocale(locale);
     const L      = i18n[lang];
 
-    // Retrieve or initialize draft
+    // 0) Load or init draft
     let draft = await this.draftAccessor.get(context, {
       state: 'idle',
       history: []
     });
 
-    // 1) Handle Confirm/Cancel actions
+    // 1) Handle Confirm / Cancel
     const value = context.activity.value;
     if (value && value.action === 'confirmTicket') {
       const { title, summary } = value;
@@ -71,16 +71,11 @@ class TeamsBot extends ActivityHandler {
       const userEmail = context.activity.from.email
         || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
-      // Create the ticket
-      const ticket = await createTicket({
-        title,
-        description: summary,
-        userName,
-        userEmail
-      });
+      // Create ticket
+      const ticket = await createTicket({ title, description: summary, userName, userEmail });
 
-      // Build replacement card: title, summary, success line
-      const successLine = 
+      // Build and replace with final success card
+      const successLine =
         `✅ [${L.ticketLabel} #${ticket.id}]` +
         `(${helpdeskWebUrl}/${ticket.id}) ${L.createdSuffix}`;
 
@@ -95,11 +90,10 @@ class TeamsBot extends ActivityHandler {
         version: '1.4'
       };
 
-      // Replace the original card
       await context.updateActivity({
-        id:         context.activity.replyToId,
-        type:       'message',
-        attachments:[ CardFactory.adaptiveCard(finalCard) ]
+        id:          context.activity.replyToId,
+        type:        'message',
+        attachments: [CardFactory.adaptiveCard(finalCard)]
       });
 
       // Reset draft
@@ -109,11 +103,24 @@ class TeamsBot extends ActivityHandler {
     }
 
     if (value && value.action === 'cancelTicket') {
-      // Replace card with plain cancellation text
+      const { title, summary } = value;
+
+      // Build and replace with final cancellation card
+      const cancelCard = {
+        type: 'AdaptiveCard',
+        body: [
+          { type: 'TextBlock', text: title, weight: 'Bolder', wrap: true },
+          { type: 'TextBlock', text: summary, wrap: true },
+          { type: 'TextBlock', text: L.cancelled, wrap: true }
+        ],
+        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+        version: '1.4'
+      };
+
       await context.updateActivity({
-        id:   context.activity.replyToId,
-        type: 'message',
-        text: L.cancelled
+        id:          context.activity.replyToId,
+        type:        'message',
+        attachments: [CardFactory.adaptiveCard(cancelCard)]
       });
 
       draft = { state: 'idle', history: [] };
@@ -121,7 +128,7 @@ class TeamsBot extends ActivityHandler {
       return;
     }
 
-    // 2) In-flight draft: gather details via LLM until done
+    // 2) In-flight draft: ask follow-up questions
     if (draft.state === 'awaiting') {
       draft.history.push({ role: 'user', content: text });
 
@@ -137,9 +144,7 @@ class TeamsBot extends ActivityHandler {
         role: 'system',
         content:
           `Eres Newlinker, asistente de IA que recopila información para un ticket de soporte. ` +
-          `Respondes siempre en el idioma que te hablan. ` +
-          `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
-          `Generas el summary hablando en primera persona, como si fueras el usuario.` +
+          `Respondes en el idioma de la solicitud. ` +
           `Usuario: ${userName}, correo: ${userEmail}. ` +
           `Solo recopila detalles del problema y equipo. ` +
           `Responde en JSON: ` +
@@ -162,7 +167,7 @@ class TeamsBot extends ActivityHandler {
         return await context.sendActivity(obj.question);
       }
 
-      // Done → send localized confirm card
+      // Ready to confirm
       draft = { state: 'idle', history: [] };
       await this.draftAccessor.set(context, draft);
 
@@ -182,16 +187,17 @@ class TeamsBot extends ActivityHandler {
           {
             type: 'Action.Submit',
             title: L.cancel,
-            data:  { action: 'cancelTicket' }
+            data:  { action: 'cancelTicket', title: obj.title, summary: obj.summary }
           }
         ],
         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
         version: '1.4'
       };
-      return await context.sendActivity({ attachments: [ CardFactory.adaptiveCard(confirmCard) ] });
+
+      return await context.sendActivity({ attachments: [CardFactory.adaptiveCard(confirmCard)] });
     }
 
-    // 3) Initial intent classification
+    // 3) Classify intent
     let info;
     try {
       info = await classifySupportRequest(text, lang);
@@ -200,7 +206,7 @@ class TeamsBot extends ActivityHandler {
       return await context.sendActivity(reply);
     }
 
-    // 4) If support intent, kick off the dynamic flow
+    // 4) Start support flow if needed
     if (info.isSupport) {
       draft = { state: 'awaiting', history: [] };
       draft.history.push({ role: 'assistant', content: `Resumen inicial: ${info.summary}` });
