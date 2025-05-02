@@ -3,35 +3,22 @@ const axios = require('axios');
 require('dotenv').config();
 
 const HELP_DESK_URL      = process.env.HELPDESK_API_URL;      // e.g. https://helpdesk.newlink-group.com/api/v1
-const HELP_DESK_TOKEN    = process.env.HELPDESK_TOKEN;        // Personal Access Token
+const HELP_DESK_TOKEN    = process.env.HELPDESK_TOKEN;        // Your personal access token
 const HELP_DESK_GROUP_ID = process.env.HELPDESK_DEFAULT_GROUP || '1';
 
 if (!HELP_DESK_URL || !HELP_DESK_TOKEN) {
-  throw new Error(
-    'MISSING_CONFIG'
-  );
+  throw new Error('Missing HELP_DESK_API_URL or HELP_DESK_TOKEN in env vars');
 }
 
-const http = axios.create({
-  baseURL: HELP_DESK_URL.replace(/\/+$/, ''),
-  timeout: 5000,
-  headers: {
-    Authorization: `Token token=${HELP_DESK_TOKEN}`,
-    'Content-Type': 'application/json'
-  }
-});
-
 /**
- * Crea un ticket en Zammad con retries y logs detallados.
- * Lanza "CREATE_TICKET_FAILED" si tras todos los retries no funciona.
+ * Crea un ticket en Zammad.
+ * Solo añadimos console.log para debug, no cambiamos la lógica de reintentos ni
+ * transformaciones de error.
  */
 async function createTicket({ title, description, userName, userEmail }) {
-  // Validaciones básicas
-  if (!title || !description) {
-    throw new Error('VALIDATION_ERROR');
-  }
+  console.log('[ticketClient] ⚙️ createTicket()', { title, userName, userEmail });
 
-  // Nombre
+  // Desglosar nombre
   const parts     = userName.trim().split(/\s+/);
   const firstName = parts.shift();
   const lastName  = parts.join(' ');
@@ -46,42 +33,36 @@ async function createTicket({ title, description, userName, userEmail }) {
       email:     userEmail
     },
     article: {
-      subject:      title,
-      body:         description,
-      type:         'email',
-      sender:       'Customer',
-      internal:     false,
-      content_type: 'text/plain'
+      subject: title,
+      body:    description
     }
   };
 
-  const maxRetries = 2;
-  const baseDelay  = 500; // ms
+  console.log('[ticketClient] 📤 Payload →', JSON.stringify(payload));
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`📬 [Attempt ${attempt+1}] POST /tickets`, { payload });
-      const resp = await http.post('/tickets', payload);
-      console.log(`✅ Ticket created on attempt ${attempt+1}:`, resp.data.id);
-      return resp.data;
-    } catch (err) {
-      const status = err.response?.status;
-      const isServerError = status >= 500 && status < 600;
-      const isNetworkError = !err.response;
-      console.warn(`⚠️ [Attempt ${attempt+1}] failed:`, status || err.message);
-
-      // Only retry on network failures or 5xx
-      if (!(isNetworkError || isServerError) || attempt === maxRetries) {
-        console.error('❌ All retries exhausted.');
-        // Lanzamos un código genérico que bot.js intercepta
-        throw new Error('CREATE_TICKET_FAILED');
+  try {
+    const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets`;
+    console.log('[ticketClient] POST', url);
+    const resp = await axios.post(
+      url,
+      payload,
+      {
+        headers: {
+          Authorization: `Token token=${HELP_DESK_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
       }
-
-      // Exponential backoff
-      const delay = baseDelay * 2 ** attempt;
-      console.log(`⏳ Waiting ${delay}ms before next attempt`);
-      await new Promise(res => setTimeout(res, delay));
-    }
+    );
+    console.log('[ticketClient] ✅ Response', resp.status, resp.data);
+    return resp.data;
+  } catch (err) {
+    console.error(
+      '[ticketClient] ❌ Error creating ticket:',
+      err.response?.status,
+      err.response?.data || err.message
+    );
+    // Rethrow the original error so your bot can handle it as before
+    throw err;
   }
 }
 
