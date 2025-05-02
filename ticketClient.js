@@ -36,7 +36,7 @@ async function createTicket({ title, description, userName, userEmail }) {
       subject:      title,
       body:         description,
       type:         "email",      // treat as incoming customer email
-      sender:       "Customer",   // ← tells Zammad it’s a customer‐sent email
+      //sender:       "Customer",   // ← tells Zammad it’s a customer‐sent email
       internal:     false,        // visible externally (customer + agents)
       content_type: "text/html"   // or "text/plain"
     }
