@@ -161,8 +161,8 @@ class TeamsBot extends ActivityHandler {
           `Generas el summary hablando en primera persona.` +
           `Usuario: ${userName}, correo: ${userEmail}. ` +
           `Solo recopila detalles del problema y equipo. ` +
-          `Responde en JSON que incluya tu idioma ISO, usando uno de estos formatos exactos:\n` +
-          `  {"done":false,"question":"…","lang":"<iso>"}\n` +
+          `Responde en JSON e incluye el código ISO de tu idioma actual en un campo "lang":\n` +
+          `  {"done":false,"question":"…","lang":"<iso>"}` +
           `  {"done":true,"title":"…","summary":"…","lang":"<iso>"}`
       };
       const userPrompt = { role: 'user', content: `Historial:\n${conversationLog}` };
