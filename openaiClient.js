@@ -88,7 +88,7 @@ Para solicitudes fuera de este ámbito o demasiado genéricas, isSupport=false.`
 
 // ———————— Helper to build messages array ————————
 function buildMessages(input, lang, useClassifier = false) {
-  // pick the right system prompt
+								 
   const sys = useClassifier
     ? CLASSIFIER_PROMPTS[lang] || CLASSIFIER_PROMPTS.es
     : SYSTEM_CHAT_PROMPTS[lang]  || SYSTEM_CHAT_PROMPTS.es;
@@ -104,7 +104,7 @@ function buildMessages(input, lang, useClassifier = false) {
 
 // ———————— Non-streaming chat call ————————
 async function callAzureOpenAI(input, detectedLanguage = "es") {
-  const messages = buildMessages(input, detectedLanguage, /*useClassifier=*/false);
+  const messages = buildMessages(input, detectedLanguage, false);
 
   const response = await client.chat.completions.create({
     messages,
@@ -122,9 +122,10 @@ async function callAzureOpenAI(input, detectedLanguage = "es") {
  * onDelta will be called for each chunk of text as it arrives.
  */
 async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta) {
-  const messages = buildMessages(input, detectedLanguage, /*useClassifier=*/false);
+  const messages = buildMessages(input, detectedLanguage, false);
 
-  const stream = client.chat.completions.create({
+  // **ADD the missing `await` here** so that `stream` becomes the async iterable
+  const stream = await client.chat.completions.create({
     messages,
     max_tokens: 1000,
     temperature: 0.7,
@@ -140,8 +141,8 @@ async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta) {
 
 // ———————— Intent classifier ————————
 async function classifySupportRequest(userInput, detectedLanguage = "es") {
-  const messages = buildMessages(userInput, detectedLanguage, /*useClassifier=*/true);
-  // reuse the non-streaming call
+  const messages = buildMessages(userInput, detectedLanguage, true);
+								 
   const res = await callAzureOpenAI(messages, detectedLanguage);
   try {
     return JSON.parse(res.trim());
