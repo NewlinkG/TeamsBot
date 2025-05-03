@@ -161,7 +161,7 @@ class TeamsBot extends ActivityHandler {
           `Generas el summary hablando en primera persona.` +
           `Usuario: ${userName}, correo: ${userEmail}. ` +
           `Solo recopila detalles del problema y equipo. ` +
-          `Responde en JSON e incluye el código ISO de tu idioma actual en un campo "lang":\n` +
+          `Responde en JSON e incluye el código ISO de tu idioma actual en un campo "lang":` +
           `  {"done":false,"question":"…","lang":"<iso>"}` +
           `  {"done":true,"title":"…","summary":"…","lang":"<iso>"}`
       };
@@ -238,7 +238,7 @@ class TeamsBot extends ActivityHandler {
 
       const firstPrompt =
         `Eres Newlinker, recopila info para un ticket de soporte: "${info.summary}". ` +
-        `Respondes siempre en el idioma que te hablan. ` +
+        `Respondes siempre en el idioma que te hablan.` +
         `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
         `Generas el summary hablando en primera persona.` +
         `Pregunta solo detalles del problema (no pidas nombre/correo).`;

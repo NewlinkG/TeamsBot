@@ -25,16 +25,16 @@ const bot = new TeamsBot(conversationState);
 
 // **Export a non-async function** and call context.done() once work is complete
 module.exports = function (context, req) {
-  console.log('🔔 api-messages invoked');
-  console.log('📝 HTTP body:', req.body);
+  // console.log('🔔 api-messages invoked');
+  // console.log('📝 HTTP body:', req.body);
 
   adapter.processActivity(req, context.res, async (turnContext) => {
-    console.log('▶️ invoking bot.run');
+    // console.log('▶️ invoking bot.run');
     await bot.run(turnContext);
-    console.log('✔️ bot.run completed');
+    // console.log('✔️ bot.run completed');
 
     await conversationState.saveChanges(turnContext);
-    console.log('💾 state saved');
+    // console.log('💾 state saved');
 
     // Tell Azure Functions we’re done
     context.done();
