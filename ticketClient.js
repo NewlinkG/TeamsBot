@@ -2,22 +2,17 @@
 const axios = require('axios');
 require('dotenv').config();
 
-const HELP_DESK_URL      = process.env.HELPDESK_API_URL;      // e.g. https://helpdesk.newlink-group.com/api/v1
-const HELP_DESK_TOKEN    = process.env.HELP_DESK_TOKEN;       // Your personal access token
+const HELP_DESK_URL      = process.env.HELP_DESK_API_URL;      // e.g. https://helpdesk.newlink-group.com/api/v1
+const HELP_DESK_TOKEN    = process.env.HELP_DESK_TOKEN;        // Your personal access token
 const HELP_DESK_GROUP_ID = process.env.HELP_DESK_DEFAULT_GROUP || '1';
 
 if (!HELP_DESK_URL || !HELP_DESK_TOKEN) {
   throw new Error('Missing HELP_DESK_API_URL or HELP_DESK_TOKEN in env vars');
 }
 
-/**
- * Crea un ticket en Zammad “on behalf” del usuario (header From),
- * manteniendo los console.log para debug.
- */
 async function createTicket({ title, description, userName, userEmail }) {
   console.log('[ticketClient] ⚙️ createTicket()', { title, userName, userEmail });
 
-  // Desglosar nombre
   const parts     = userName.trim().split(/\s+/);
   const firstName = parts.shift();
   const lastName  = parts.join(' ');
@@ -34,13 +29,13 @@ async function createTicket({ title, description, userName, userEmail }) {
     article: {
       subject:      title,
       body:         description,
-      type:         "email",      // incoming customer email
-      internal:     false,        // visible to both customer & agents
-      content_type: "text/html"   // or "text/plain"
+      type:         "email",
+      internal:     false,
+      content_type: "text/html"
     }
   };
 
-  console.log('[ticketClient] 📤 Payload →', JSON.stringify(payload));
+  console.log('[ticketClient] 📤 Payload →', JSON.stringify(payload, null, 2));
 
   try {
     const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets`;
@@ -52,19 +47,22 @@ async function createTicket({ title, description, userName, userEmail }) {
         headers: {
           Authorization: `Token token=${HELP_DESK_TOKEN}`,
           'Content-Type': 'application/json',
-          From: userEmail     // <-- Run the request on behalf of this user
+          From:           userEmail
         }
       }
     );
     console.log('[ticketClient] ✅ Response', resp.status, resp.data);
     return resp.data;
   } catch (err) {
-    console.error(
-      '[ticketClient] ❌ Error creating ticket:',
-      err.response?.status,
-      err.response?.data || err.message
-    );
-    // Rethrow so bot.js can handle the error as before
+    console.error('[ticketClient] ❌ Error creating ticket:');
+    if (err.response) {
+      console.error('  Status :', err.response.status);
+      console.error('  Headers:', JSON.stringify(err.response.headers, null, 2));
+      console.error('  Body   :', JSON.stringify(err.response.data, null, 2));
+    } else {
+      console.error('  Message:', err.message);
+    }
+    // rethrow so bot.js can handle as before
     throw err;
   }
 }
