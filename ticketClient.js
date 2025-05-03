@@ -10,9 +10,14 @@ if (!HELP_DESK_URL || !HELP_DESK_TOKEN) {
   throw new Error('Missing HELP_DESK_API_URL or HELP_DESK_TOKEN in env vars');
 }
 
+/**
+ * Crea un ticket en Zammad como una nota (type: "note"),
+ * manteniendo los console.log para debug.
+ */
 async function createTicket({ title, description, userName, userEmail }) {
   console.log('[ticketClient] ⚙️ createTicket()', { title, userName, userEmail });
 
+  // Desglosar el nombre completo
   const parts     = userName.trim().split(/\s+/);
   const firstName = parts.shift();
   const lastName  = parts.join(' ');
@@ -29,9 +34,9 @@ async function createTicket({ title, description, userName, userEmail }) {
     article: {
       subject:      title,
       body:         description,
-      type:         "email",
-      internal:     false,
-      content_type: "text/html"
+      type:         "note",       // <— create as a Note, not email
+      internal:     false,        // visible to both customer & agents
+      content_type: "text/html"   // or "text/plain"
     }
   };
 
@@ -46,8 +51,7 @@ async function createTicket({ title, description, userName, userEmail }) {
       {
         headers: {
           Authorization: `Token token=${HELP_DESK_TOKEN}`,
-          'Content-Type': 'application/json',
-          From:           userEmail
+          'Content-Type': 'application/json'
         }
       }
     );
@@ -62,7 +66,6 @@ async function createTicket({ title, description, userName, userEmail }) {
     } else {
       console.error('  Message:', err.message);
     }
-    // rethrow so bot.js can handle as before
     throw err;
   }
 }
