@@ -133,16 +133,20 @@ class TeamsBot extends ActivityHandler {
         .map(m => `[${m.role}] ${m.content}`)
         .join('\n');
 
-      const systemPrompt = {
-        role: 'system',
-        content:
-          `Eres Newlinker, asistente de IA que recopila información para un ticket de soporte. ` +
-          `Usuario: ${userName}, correo: ${userEmail}. ` +
-          `Solo recopila detalles del problema y equipo. ` +
-          `Responde en JSON: ` +
-          `{"done":false,"question":"…"} o ` +
-          `{"done":true,"title":"…","summary":"…"}.`
-      };
+        const systemPrompt = {
+          role: 'system',
+          content:
+            `Eres Newlinker, asistente de IA que recopila información para un ticket de soporte. ` +
+            `Respondes siempre en el idioma que te hablan. ` +
+            `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
+            `Generas el summary como si fueras el usuario sin decir tu nombre a menos que lo pida el usuario.` +
+            `Usuario: ${userName}, correo: ${userEmail}. ` +
+            `Solo recopila detalles del problema y equipo. ` +
+            `Responde en JSON: ` +
+            `{"done":false,"question":"…"} o ` +
+            `{"done":true,"title":"…","summary":"…"}.`
+        };
+        
       const userPrompt = { role: 'user', content: `Historial:\n${conversationLog}` };
 
       const raw = await callAzureOpenAI([systemPrompt, userPrompt], lang);
