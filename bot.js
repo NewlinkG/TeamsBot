@@ -151,20 +151,20 @@ class TeamsBot extends ActivityHandler {
         .map(m => `[${m.role}] ${m.content}`)
         .join('\n');
 
-        const systemPrompt = {
-          role: 'system',
-          content:
-            `Eres Newlinker, asistente de IA que recopila información para un ticket de soporte. ` +
-            `Respondes siempre en el idioma que te hablan. ` +
-            `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
-            `Generas el summary hablando en primera persona.` +
-            `Usuario: ${userName}, correo: ${userEmail}. ` +
-            `Solo recopila detalles del problema y equipo. ` +
-            `Responde en JSON: ` +
-            `{"done":false,"question":"…"} o ` +
-            `{"done":true,"title":"…","summary":"…"}.`
-        };
-    
+      // **Only this prompt changed** to ask for a `"lang"` field in the JSON
+      const systemPrompt = {
+        role: 'system',
+        content:
+          `Eres Newlinker, asistente de IA que recopila información para un ticket de soporte. ` +
+          `Respondes siempre en el idioma que te hablan. ` +
+          `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
+          `Generas el summary hablando en primera persona.` +
+          `Usuario: ${userName}, correo: ${userEmail}. ` +
+          `Solo recopila detalles del problema y equipo. ` +
+          `Responde en JSON que incluya tu idioma ISO, usando uno de estos formatos exactos:\n` +
+          `  {"done":false,"question":"…","lang":"<iso>"}\n` +
+          `  {"done":true,"title":"…","summary":"…","lang":"<iso>"}`
+      };
       const userPrompt = { role: 'user', content: `Historial:\n${conversationLog}` };
 
       const raw = await callAzureOpenAI([ systemPrompt, userPrompt ], lang);
@@ -196,7 +196,7 @@ class TeamsBot extends ActivityHandler {
           {
             type: 'Action.Submit',
             title: L.confirm,
-            data:  { 
+            data:  {
               action:  'confirmTicket',
               title:   obj.title,
               summary: obj.summary,
@@ -206,7 +206,7 @@ class TeamsBot extends ActivityHandler {
           {
             type: 'Action.Submit',
             title: L.cancel,
-            data:  { 
+            data:  {
               action:  'cancelTicket',
               title:   obj.title,
               summary: obj.summary,
@@ -238,6 +238,9 @@ class TeamsBot extends ActivityHandler {
 
       const firstPrompt =
         `Eres Newlinker, recopila info para un ticket de soporte: "${info.summary}". ` +
+        `Respondes siempre en el idioma que te hablan. ` +
+        `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
+        `Generas el summary hablando en primera persona.` +
         `Pregunta solo detalles del problema (no pidas nombre/correo).`;
       const firstQ = await callAzureOpenAI(firstPrompt, lang);
       draft.history.push({ role: 'assistant', content: firstQ });
