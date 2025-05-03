@@ -1,6 +1,6 @@
 {
     "name": "TeamsBot",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "Bot de Microsoft Teams usando Azure OpenAI GPT-4o-mini",
     "dependencies": {
         "botbuilder": "^4.20.0",

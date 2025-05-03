@@ -1,6 +1,10 @@
 // bot.js
 const { ActivityHandler, CardFactory } = require('botbuilder');
-const { callAzureOpenAI, classifySupportRequest } = require('./openaiClient');
+const {
+  callAzureOpenAI,
+  callAzureOpenAIStream,
+  classifySupportRequest
+} = require('./openaiClient');
 const { createTicket } = require('./ticketClient');
 
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
@@ -57,33 +61,26 @@ class TeamsBot extends ActivityHandler {
     const lang   = detectLanguageFromLocale(locale);
     const L      = i18n[lang];
 
-    // Retrieve or initialize the draft
+    // 0) Load or init draft
     let draft = await this.draftAccessor.get(context, {
       state: 'idle',
       history: []
     });
 
-    // 1) Handle Confirm / Cancel actions
+    // 1) CONFIRM / CANCEL flows
     const value = context.activity.value;
     if (value && value.action === 'confirmTicket') {
-      // Use the lang that was saved in the card
+      // preserve the card's lang if provided
       const cardLang = value.lang || lang;
       const LC = i18n[cardLang];
 
       const { title, summary } = value;
       const userName  = context.activity.from.name;
-      const userEmail = context.activity.from.email ||
-                        `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+      const userEmail = context.activity.from.email
+        || `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
 
-      // Create the ticket
-      const ticket = await createTicket({
-        title,
-        description: summary,
-        userName,
-        userEmail
-      });
+      const ticket = await createTicket({ title, description: summary, userName, userEmail });
 
-      // Build and replace with final success card
       const successLine =
         `✅ [${LC.ticketLabel} #${ticket.id}]` +
         `(${helpdeskWebUrl}/${ticket.id}) ${LC.createdSuffix}`;
@@ -91,7 +88,7 @@ class TeamsBot extends ActivityHandler {
       const finalCard = {
         type: 'AdaptiveCard',
         body: [
-          { type: 'TextBlock', text: title, weight: 'Bolder', wrap: true },
+          { type: 'TextBlock', text: title,   weight: 'Bolder', wrap: true },
           { type: 'TextBlock', text: summary, wrap: true },
           { type: 'TextBlock', text: successLine, wrap: true }
         ],
@@ -100,9 +97,9 @@ class TeamsBot extends ActivityHandler {
       };
 
       await context.updateActivity({
-        id:         context.activity.replyToId,
-        type:       'message',
-        attachments:[ CardFactory.adaptiveCard(finalCard) ]
+        id:          context.activity.replyToId,
+        type:        'message',
+        attachments: [ CardFactory.adaptiveCard(finalCard) ]
       });
 
       draft = { state: 'idle', history: [] };
@@ -111,16 +108,14 @@ class TeamsBot extends ActivityHandler {
     }
 
     if (value && value.action === 'cancelTicket') {
-      // Use the lang that was saved in the card
       const cardLang = value.lang || lang;
       const LC = i18n[cardLang];
-
       const { title, summary } = value;
 
       const cancelCard = {
         type: 'AdaptiveCard',
         body: [
-          { type: 'TextBlock', text: title, weight: 'Bolder', wrap: true },
+          { type: 'TextBlock', text: title,   weight: 'Bolder', wrap: true },
           { type: 'TextBlock', text: summary, wrap: true },
           { type: 'TextBlock', text: LC.cancelled, wrap: true }
         ],
@@ -129,9 +124,9 @@ class TeamsBot extends ActivityHandler {
       };
 
       await context.updateActivity({
-        id:         context.activity.replyToId,
-        type:       'message',
-        attachments:[ CardFactory.adaptiveCard(cancelCard) ]
+        id:          context.activity.replyToId,
+        type:        'message',
+        attachments: [ CardFactory.adaptiveCard(cancelCard) ]
       });
 
       draft = { state: 'idle', history: [] };
@@ -139,19 +134,19 @@ class TeamsBot extends ActivityHandler {
       return;
     }
 
-    // 2) In-flight draft: gather details until done
+    // 2) IN-FLIGHT DRAFT (JSON loop)
     if (draft.state === 'awaiting') {
       draft.history.push({ role: 'user', content: text });
 
       const userName  = context.activity.from.name;
-      const userEmail = context.activity.from.email ||
-                        `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+      const userEmail = context.activity.from.email
+        || `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
 
       const conversationLog = draft.history
         .map(m => `[${m.role}] ${m.content}`)
         .join('\n');
 
-      // **Only this prompt changed** to ask for a `"lang"` field in the JSON
+      // your JSON-driven LLM prompt
       const systemPrompt = {
         role: 'system',
         content:
@@ -161,9 +156,9 @@ class TeamsBot extends ActivityHandler {
           `Generas el summary hablando en primera persona.` +
           `Usuario: ${userName}, correo: ${userEmail}. ` +
           `Solo recopila detalles del problema y equipo. ` +
-          `Responde en JSON e incluye el código ISO de tu idioma actual en un campo "lang":` +
-          `  {"done":false,"question":"…","lang":"<iso>"}` +
-          `  {"done":true,"title":"…","summary":"…","lang":"<iso>"}`
+          `Responde en JSON e incluye el código ISO de tu idioma actual en un campo "lang": ` +
+          `{"done":false,"question":"…","lang":"<iso>"} ` +
+          `o {"done":true,"title":"…","summary":"…","lang":"<iso>"}.`
       };
       const userPrompt = { role: 'user', content: `Historial:\n${conversationLog}` };
 
@@ -176,21 +171,21 @@ class TeamsBot extends ActivityHandler {
       }
 
       if (!obj.done) {
-        draft.history.push({ role: 'assistant', content: obj.question });
+        draft.history.push({ role:'assistant', content: obj.question });
         await this.draftAccessor.set(context, draft);
         return await context.sendActivity(obj.question);
       }
 
-      // Ready to confirm: reset draft and send confirm card
-      draft = { state: 'idle', history: [] };
+      // done → show confirm card
+      draft = { state:'idle', history:[] };
       await this.draftAccessor.set(context, draft);
 
       const confirmCard = {
         type: 'AdaptiveCard',
         body: [
-          { type: 'TextBlock', text: L.confirmPrompt, wrap: true },
-          { type: 'TextBlock', text: `**${obj.title}**`, wrap: true },
-          { type: 'TextBlock', text: obj.summary, wrap: true }
+          { type:'TextBlock', text: L.confirmPrompt, wrap: true },
+          { type:'TextBlock', text:`**${obj.title}**`, wrap: true },
+          { type:'TextBlock', text: obj.summary, wrap: true }
         ],
         actions: [
           {
@@ -200,7 +195,7 @@ class TeamsBot extends ActivityHandler {
               action:  'confirmTicket',
               title:   obj.title,
               summary: obj.summary,
-              lang     // ← preserve language
+              lang     // preserve language
             }
           },
           {
@@ -210,7 +205,7 @@ class TeamsBot extends ActivityHandler {
               action:  'cancelTicket',
               title:   obj.title,
               summary: obj.summary,
-              lang     // ← preserve language
+              lang
             }
           }
         ],
@@ -221,37 +216,48 @@ class TeamsBot extends ActivityHandler {
       return await context.sendActivity({ attachments: [ CardFactory.adaptiveCard(confirmCard) ] });
     }
 
-    // 3) Initial intent classification
+    // 3) INTENT CLASSIFICATION
     let info;
     try {
       info = await classifySupportRequest(text, lang);
     } catch {
-      const reply = await callAzureOpenAI(text, lang);
+      // fallback to non-streaming LLM chat
+      await context.sendActivity({ type: 'typing' });
+      let reply = '';
+      await callAzureOpenAIStream(text, lang, chunk => reply += chunk);
       return await context.sendActivity(reply);
     }
 
-    // 4) Kick off support flow if needed
+    // 4) KICK-OFF SUPPORT FLOW
     if (info.isSupport) {
-      draft = { state: 'awaiting', history: [] };
-      draft.history.push({ role: 'assistant', content: `Resumen inicial: ${info.summary}` });
+      draft = { state:'awaiting', history:[] };
+      draft.history.push({ role:'assistant', content:`Resumen inicial: ${info.summary}` });
       await this.draftAccessor.set(context, draft);
 
+      // stream the first follow-up question
       const firstPrompt =
         `Eres Newlinker, recopila info para un ticket de soporte: "${info.summary}". ` +
-        `Respondes siempre en el idioma que te hablan.` +
+        `Respondes siempre en el idioma que te hablan. ` +
         `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
         `Generas el summary hablando en primera persona.` +
         `Pregunta solo detalles del problema (no pidas nombre/correo).`;
-      const firstQ = await callAzureOpenAI(firstPrompt, lang);
-      draft.history.push({ role: 'assistant', content: firstQ });
+
+      await context.sendActivity({ type: 'typing' });
+      let firstQ = '';
+      await callAzureOpenAIStream(firstPrompt, lang, delta => firstQ += delta);
+
+      draft.history.push({ role:'assistant', content: firstQ });
       await this.draftAccessor.set(context, draft);
 
       return await context.sendActivity(firstQ);
     }
 
-    // 5) Fallback: normal chat
-    const reply = await callAzureOpenAI(text, lang);
+    // 5) FALLBACK NORMAL CHAT
+    await context.sendActivity({ type: 'typing' });
+    let reply = '';
+    await callAzureOpenAIStream(text, lang, chunk => reply += chunk);
     await context.sendActivity(reply);
+
     await this.draftAccessor.set(context, draft);
     await next();
   }
