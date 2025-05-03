@@ -2,22 +2,18 @@
 const axios = require('axios');
 require('dotenv').config();
 
-const HELP_DESK_URL      = process.env.HELPDESK_API_URL;      // e.g. https://helpdesk.newlink-group.com/api/v1
-const HELP_DESK_TOKEN    = process.env.HELPDESK_TOKEN;        // tu Personal Access Token
-const HELP_DESK_GROUP_ID = process.env.HELPDESK_DEFAULT_GROUP || '1';
+const HELP_DESK_URL      = process.env.HELPDESK_API_URL;
+const HELP_DESK_TOKEN    = process.env.HELPDESK_TOKEN;
+const HELP_DESK_GROUP_ID = process.env.HELPESK_DEFAULT_GROUP || '1';
 
 if (!HELP_DESK_URL || !HELP_DESK_TOKEN) {
   throw new Error(
-    'Falta configurar HELPESK_API_URL y HELPESK_TOKEN en las env vars'
+    'Falta configurar HELP_DESK_API_URL y HELP_DESK_TOKEN en las env vars'
   );
 }
 
-/**
- * Crea un ticket en Zammad usando HTTP Token Auth, 
- * e incluye el nombre completo del usuario como contacto.
- */
 async function createTicket({ title, description, userName, userEmail }) {
-  // Desglosar el nombre completo en first/last
+  // Nombre completo → first/last
   const parts     = userName.trim().split(/\s+/);
   const firstName = parts.shift();
   const lastName  = parts.join(' ');
@@ -37,15 +33,17 @@ async function createTicket({ title, description, userName, userEmail }) {
     }
   };
 
+  // Añade el header From con el email del usuario:
+  const headers = {
+    Authorization: `Token token=${HELP_DESK_TOKEN}`,
+    'Content-Type': 'application/json',
+    From:           userEmail            // <— impersona al usuario
+  };
+
   const resp = await axios.post(
     `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets`,
     payload,
-    {
-      headers: {
-        Authorization: `Token token=${HELP_DESK_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
-    }
+    { headers }
   );
 
   return resp.data;

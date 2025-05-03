@@ -57,19 +57,23 @@ class TeamsBot extends ActivityHandler {
     const lang   = detectLanguageFromLocale(locale);
     const L      = i18n[lang];
 
-    // Retrieve or initialize draft
+    // Retrieve or initialize the draft
     let draft = await this.draftAccessor.get(context, {
       state: 'idle',
       history: []
     });
 
-    // 1) Handle Confirm/Cancel actions
+    // 1) Handle Confirm / Cancel actions
     const value = context.activity.value;
     if (value && value.action === 'confirmTicket') {
+      // Use the lang that was saved in the card
+      const cardLang = value.lang || lang;
+      const LC = i18n[cardLang];
+
       const { title, summary } = value;
       const userName  = context.activity.from.name;
-      const userEmail = context.activity.from.email
-        || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+      const userEmail = context.activity.from.email ||
+                        `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
       // Create the ticket
       const ticket = await createTicket({
@@ -79,10 +83,10 @@ class TeamsBot extends ActivityHandler {
         userEmail
       });
 
-      // Build replacement card: title, summary, success line
-      const successLine = 
-        `✅ [${L.ticketLabel} #${ticket.id}]` +
-        `(${helpdeskWebUrl}/${ticket.id}) ${L.createdSuffix}`;
+      // Build and replace with final success card
+      const successLine =
+        `✅ [${LC.ticketLabel} #${ticket.id}]` +
+        `(${helpdeskWebUrl}/${ticket.id}) ${LC.createdSuffix}`;
 
       const finalCard = {
         type: 'AdaptiveCard',
@@ -95,25 +99,39 @@ class TeamsBot extends ActivityHandler {
         version: '1.4'
       };
 
-      // Replace the original card
       await context.updateActivity({
         id:         context.activity.replyToId,
         type:       'message',
         attachments:[ CardFactory.adaptiveCard(finalCard) ]
       });
 
-      // Reset draft
       draft = { state: 'idle', history: [] };
       await this.draftAccessor.set(context, draft);
       return;
     }
 
     if (value && value.action === 'cancelTicket') {
-      // Replace card with plain cancellation text
+      // Use the lang that was saved in the card
+      const cardLang = value.lang || lang;
+      const LC = i18n[cardLang];
+
+      const { title, summary } = value;
+
+      const cancelCard = {
+        type: 'AdaptiveCard',
+        body: [
+          { type: 'TextBlock', text: title, weight: 'Bolder', wrap: true },
+          { type: 'TextBlock', text: summary, wrap: true },
+          { type: 'TextBlock', text: LC.cancelled, wrap: true }
+        ],
+        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+        version: '1.4'
+      };
+
       await context.updateActivity({
-        id:   context.activity.replyToId,
-        type: 'message',
-        text: L.cancelled
+        id:         context.activity.replyToId,
+        type:       'message',
+        attachments:[ CardFactory.adaptiveCard(cancelCard) ]
       });
 
       draft = { state: 'idle', history: [] };
@@ -121,13 +139,13 @@ class TeamsBot extends ActivityHandler {
       return;
     }
 
-    // 2) In-flight draft: gather details via LLM until done
+    // 2) In-flight draft: gather details until done
     if (draft.state === 'awaiting') {
       draft.history.push({ role: 'user', content: text });
 
       const userName  = context.activity.from.name;
-      const userEmail = context.activity.from.email
-        || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+      const userEmail = context.activity.from.email ||
+                        `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
       const conversationLog = draft.history
         .map(m => `[${m.role}] ${m.content}`)
@@ -139,17 +157,17 @@ class TeamsBot extends ActivityHandler {
             `Eres Newlinker, asistente de IA que recopila información para un ticket de soporte. ` +
             `Respondes siempre en el idioma que te hablan. ` +
             `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
-            `Generas el summary como si fueras el usuario sin decir tu nombre a menos que lo pida el usuario.` +
+            `Generas el summary hablando en primera persona.` +
             `Usuario: ${userName}, correo: ${userEmail}. ` +
             `Solo recopila detalles del problema y equipo. ` +
             `Responde en JSON: ` +
             `{"done":false,"question":"…"} o ` +
             `{"done":true,"title":"…","summary":"…"}.`
         };
-        
+    
       const userPrompt = { role: 'user', content: `Historial:\n${conversationLog}` };
 
-      const raw = await callAzureOpenAI([systemPrompt, userPrompt], lang);
+      const raw = await callAzureOpenAI([ systemPrompt, userPrompt ], lang);
       let obj;
       try {
         obj = JSON.parse(raw.trim());
@@ -163,7 +181,7 @@ class TeamsBot extends ActivityHandler {
         return await context.sendActivity(obj.question);
       }
 
-      // Done → send localized confirm card
+      // Ready to confirm: reset draft and send confirm card
       draft = { state: 'idle', history: [] };
       await this.draftAccessor.set(context, draft);
 
@@ -178,17 +196,28 @@ class TeamsBot extends ActivityHandler {
           {
             type: 'Action.Submit',
             title: L.confirm,
-            data:  { action: 'confirmTicket', title: obj.title, summary: obj.summary }
+            data:  { 
+              action:  'confirmTicket',
+              title:   obj.title,
+              summary: obj.summary,
+              lang     // ← preserve language
+            }
           },
           {
             type: 'Action.Submit',
             title: L.cancel,
-            data:  { action: 'cancelTicket' }
+            data:  { 
+              action:  'cancelTicket',
+              title:   obj.title,
+              summary: obj.summary,
+              lang     // ← preserve language
+            }
           }
         ],
         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
         version: '1.4'
       };
+
       return await context.sendActivity({ attachments: [ CardFactory.adaptiveCard(confirmCard) ] });
     }
 
@@ -201,7 +230,7 @@ class TeamsBot extends ActivityHandler {
       return await context.sendActivity(reply);
     }
 
-    // 4) If support intent, kick off the dynamic flow
+    // 4) Kick off support flow if needed
     if (info.isSupport) {
       draft = { state: 'awaiting', history: [] };
       draft.history.push({ role: 'assistant', content: `Resumen inicial: ${info.summary}` });
