@@ -63,7 +63,7 @@ async function createTicket({ title, description, userName, userEmail }) {
       subject:      title,
       body:         description,
       type:         'email',        // interpretado como email entrante
-      sender:       'Customer',     // origen = cliente
+      //sender:       'Customer',     // origen = cliente
       internal:     false,
       content_type: 'text/plain'
     }
