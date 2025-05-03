@@ -137,9 +137,6 @@ class TeamsBot extends ActivityHandler {
         role: 'system',
         content:
           `Eres Newlinker, asistente de IA que recopila información para un ticket de soporte. ` +
-          `Respondes siempre en el idioma que te hablan. ` +
-          `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
-          `Generas el summary como si fueras el usuario. No debes incluir el nombre a menos que lo pida el usuario.` +
           `Usuario: ${userName}, correo: ${userEmail}. ` +
           `Solo recopila detalles del problema y equipo. ` +
           `Responde en JSON: ` +
