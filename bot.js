@@ -198,7 +198,7 @@ class TeamsBot extends ActivityHandler {
               action: 'confirmTicket',
               title:  obj.title,
               summary:obj.summary,
-              lang     // carry forward the lang
+              cardLang     // carry forward the lang
             }
           },
           {
@@ -208,7 +208,7 @@ class TeamsBot extends ActivityHandler {
               action: 'cancelTicket',
               title:  obj.title,
               summary:obj.summary,
-              lang
+              cardLang
             }
           }
         ],
