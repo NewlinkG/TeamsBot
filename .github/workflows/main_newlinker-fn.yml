@@ -36,25 +36,24 @@ jobs:
           npm run build --if-present
           npm run test --if-present
           popd
+      - name: 'Delete Old Artifacts'
+          uses: actions/github-script@v6
+          id: artifact
+          with:
+            script: |
+              const res = await github.rest.actions.listArtifactsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              })
 
-  - name: 'Delete Old Artifacts'
-    uses: actions/github-script@v6
-    id: artifact
-    with:
-      script: |
-        const res = await github.rest.actions.listArtifactsForRepo({
-          owner: context.repo.owner,
-          repo: context.repo.repo,
-        })
-
-        res.data.artifacts
-          .forEach(({ id }) => {
-            github.rest.actions.deleteArtifact({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              artifact_id: id,
-            })
-          })
+              res.data.artifacts
+                .forEach(({ id }) => {
+                  github.rest.actions.deleteArtifact({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    artifact_id: id,
+                  })
+                })
           
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
