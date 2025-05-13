@@ -1,11 +1,17 @@
 {
     "name": "TeamsBot",
-    "version": "1.0.6",
-    "description": "Bot de Microsoft Teams usando Azure OpenAI GPT-4o-mini",
+    "version": "1.0.7",
+    "description": "Bot de Microsoft Teams para asistencia de IT en Newlink",
     "dependencies": {
         "botbuilder": "^4.20.0",
         "axios": "^1.6.2",
         "dotenv": "^16.3.1",
-        "openai": "^4.96.2"
+        "openai": "^4.96.2",
+        "@notionhq/client": "^2.0.0",
+        "@azure/storage-blob": "^12.0.0",
+        "@azure/identity": "^3.0.0",
+        "@azure/cognitiveservices-computervision": "^8.0.0",
+        "@pinecone-database/pinecone": "^0.0.20",
+        "node-fetch": "^3.0.0"
     }
 }

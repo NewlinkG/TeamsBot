@@ -1,0 +1,11 @@
+{
+  "bindings": [
+    {
+      "name": "timer",
+      "type": "timerTrigger",
+      "direction": "in",
+      // every night at 2 AM
+      "schedule": "0 0 2 * * *"
+    }
+  ]
+}
