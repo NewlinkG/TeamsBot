@@ -12,7 +12,7 @@ const fetch = require('node-fetch');
 
 // ———— env vars ————
 const NOTION_TOKEN        = process.env.NOTION_TOKEN;
-const NOTION_SITE_ROOT    = process.env.NOTION_SITE_ROOT;    // <-- root page ID
+const NOTION_SITE_ROOT    = process.env.NOTION_SITE_ROOT;
 const AZURE_STORAGE_CONN  = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const BLOB_CONTAINER      = process.env.BLOB_CONTAINER_NAME || 'notion-assets';
 const CV_ENDPOINT         = process.env.COMPUTER_VISION_ENDPOINT;
