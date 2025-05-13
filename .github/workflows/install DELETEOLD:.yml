@@ -1,0 +1,2 @@
+- name: Delete Old GitHub Actions Runs
+  uses: yanovation/delete-old-actions@v1
