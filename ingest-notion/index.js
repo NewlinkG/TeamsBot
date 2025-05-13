@@ -19,7 +19,6 @@ const CV_ENDPOINT         = process.env.COMPUTER_VISION_ENDPOINT;
 const CV_KEY              = process.env.COMPUTER_VISION_KEY;
 const OPENAI_KEY          = process.env.OPENAI_API_KEY;
 const PINECONE_API_KEY    = process.env.PINECONE_API_KEY;
-const PINECONE_ENV        = process.env.PINECONE_ENVIRONMENT;
 const PINECONE_INDEX_NAME = process.env.PINECONE_INDEX_NAME;
 
 if (!NOTION_TOKEN || !NOTION_SITE_ROOT) {
@@ -43,7 +42,7 @@ module.exports = async function (context, timer) {
   const openai = new OpenAI({ apiKey: OPENAI_KEY });
 
   const pinecone = new PineconeClient();
-  await pinecone.init({ apiKey: PINECONE_API_KEY, environment: PINECONE_ENV });
+  await pinecone.init({ apiKey: PINECONE_API_KEY });
   const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
 
   // 2) Recursively walk the “site” starting from NOTION_SITE_ROOT
