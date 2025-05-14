@@ -5,7 +5,7 @@
       "type": "timerTrigger",
       "direction": "in",
       // every night at 2 AM
-      "schedule": "0 0 2 * * *"
+      "schedule": "0 0 * * * *"
     }
   ]
 }
