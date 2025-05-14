@@ -149,7 +149,7 @@ class TeamsBot extends ActivityHandler {
       const systemPrompt = {
         role:'system',
         content:
-          `Eres Newlinker, asistente de IA que recopila información para un ticket de soporte. ` +
+          `Eres OrbIT, asistente de IA que recopila información para un ticket de soporte. ` +
           `Respondes siempre en el idioma que te hablan. ` +
           `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
           `Generas el summary hablando en primera persona.` +
@@ -240,7 +240,7 @@ class TeamsBot extends ActivityHandler {
       await this.draftAccessor.set(context, draft);
 
       const firstPrompt =
-        `Eres Newlinker, recopila info para un ticket de soporte: "${info.summary}". ` +
+        `Eres OrbIT, recopila info para un ticket de soporte: "${info.summary}". ` +
         `Respondes siempre en el idioma que te hablan.` +
         `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
         `Generas el summary hablando en primera persona.` +
