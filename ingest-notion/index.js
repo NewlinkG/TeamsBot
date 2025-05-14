@@ -21,7 +21,7 @@ const OPENAI_KEY          = process.env.OPENAI_API_KEY;
 const PINECONE_API_KEY    = process.env.PINECONE_API_KEY;
 const PINECONE_INDEX_NAME = process.env.PINECONE_INDEX_NAME;
 
-module.exports = async function (context, timer) {
+module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
 
   try {
