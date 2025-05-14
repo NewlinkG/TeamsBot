@@ -5,8 +5,7 @@ const { Client: NotionClient }      = require('@notionhq/client');
 const { BlobServiceClient }         = require('@azure/storage-blob');
 const { ComputerVisionClient }      = require('@azure/cognitiveservices-computervision');
 const { ApiKeyCredentials }         = require('@azure/ms-rest-js');
-const _pineconePkg                  = require('@pinecone-database/pinecone');
-const PineconeClient                = _pineconePkg.PineconeClient || _pineconePkg.default;
+const { Pinecone }                  = require('@pinecone-database/pinecone');
 const { OpenAI }                    = require('openai');
 const path                          = require('path');
 const os                            = require('os');
@@ -69,10 +68,16 @@ module.exports = async function (context, req) {
       }
     });
 
-    const pinecone = new PineconeClient();
-    await pinecone.init({ apiKey: PINECONE_API_KEY });
-    const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
-    context.log('✅ Pinecone index ready:', PINECONE_INDEX_NAME);
+    // Pinecone (v6+) wants apiKey + environment in its constructor
+    const pinecone = new Pinecone({
+      apiKey:      process.env.PINECONE_API_KEY,
+      environment: process.env.PINECONE_ENVIRONMENT
+    });
+
+    // grab your index
+    const pineIndex = pinecone.Index(process.env.PINECONE_INDEX_NAME);
+
+    context.log('✅ Pinecone index ready:', process.env.PINECONE_INDEX_NAME);
 
     // … your ingestion logic (walk, OCR, embeddings, upsert) …
 
