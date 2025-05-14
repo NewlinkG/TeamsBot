@@ -48,12 +48,11 @@ module.exports = async function (context, req) {
     await container.createIfNotExists();
     context.log('✅ Blob container ready:', BLOB_CONTAINER);
 
-    // ←—— Here’s the key change:
+    // Use the correct credentials class here:
     const cvCreds = new CognitiveServicesCredentials(CV_KEY);
     const cvClient = new ComputerVisionClient(cvCreds, CV_ENDPOINT);
     context.log('✅ Computer Vision client ready');
 
-    // Azure OpenAI client
     const openai = new OpenAI({
       apiKey: AZ_OPENAI_KEY,
       azure: {
@@ -68,15 +67,17 @@ module.exports = async function (context, req) {
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
     context.log('✅ Pinecone index ready:', PINECONE_INDEX_NAME);
 
-    // … rest of your ingestion logic unchanged …
-    // walk through Notion pages, OCR attachments, generate embeddings, upsert to Pinecone …
+    // … your ingestion logic (walk, OCR, embeddings, upsert) …
 
     context.log('🏁 ingest-notion complete');
     context.res = { status: 200, body: "Ingestion kicked off." };
+    return;    // <-- ensure the function ends here, no further thrown exceptions
   }
   catch (err) {
+    // **Do not throw** here: just set the 500 response and return
     context.log.error('❌ ingest-notion failed:', err.message);
     context.log.error(err.stack);
     context.res = { status: 500, body: err.message };
+    return;
   }
 };
