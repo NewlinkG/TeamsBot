@@ -1,18 +1,16 @@
 // ingest-notion/index.js
-console.log('🔧 ingest-notion module loaded');  
+console.log('🔧 ingest-notion module loaded');
 
-const { Client: NotionClient }         = require('@notionhq/client');
-const { BlobServiceClient }            = require('@azure/storage-blob');
-const { ComputerVisionClient }         = require('@azure/cognitiveservices-computervision');
-const { CognitiveServicesCredentials } = require('@azure/ms-rest-js');
-const { PineconeClient }               = require('@pinecone-database/pinecone');
-const { OpenAI }                       = require('openai');
-const path                             = require('path');
-const os                               = require('os');
-const fs                               = require('fs/promises');
-const fetch                            = require('node-fetch');
-
-console.log('🔧 ingest-notion module constants loaded');  
+const { Client: NotionClient }      = require('@notionhq/client');
+const { BlobServiceClient }         = require('@azure/storage-blob');
+const { ComputerVisionClient }      = require('@azure/cognitiveservices-computervision');
+const { ApiKeyCredentials }         = require('@azure/ms-rest-js');
+const { PineconeClient }            = require('@pinecone-database/pinecone');
+const { OpenAI }                    = require('openai');
+const path                          = require('path');
+const os                            = require('os');
+const fs                            = require('fs/promises');
+const fetch                         = require('node-fetch');
 
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion (HTTP) triggered at', new Date().toISOString());
@@ -38,7 +36,8 @@ module.exports = async function (context, req) {
     if (!NOTION_TOKEN)        throw new Error('Missing NOTION_TOKEN');
     if (!NOTION_SITE_ROOT)    throw new Error('Missing NOTION_SITE_ROOT');
     if (!AZURE_STORAGE_CONN)  throw new Error('Missing AZURE_STORAGE_CONNECTION_STRING');
-    if (!CV_ENDPOINT || !CV_KEY)  throw new Error('Missing COMPUTER_VISION_ENDPOINT or COMPUTER_VISION_KEY');
+    if (!CV_ENDPOINT || !CV_KEY)  
+                              throw new Error('Missing COMPUTER_VISION_ENDPOINT or COMPUTER_VISION_KEY');
     if (!AZ_OPENAI_ENDPOINT || !AZ_OPENAI_KEY || !AZ_OPENAI_DEPLOYMENT_ID)
                               throw new Error('Missing one of AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, or AZURE_OPENAI_DEPLOYMENT_ID');
     if (!PINECONE_API_KEY)    throw new Error('Missing PINECONE_API_KEY');
@@ -52,11 +51,14 @@ module.exports = async function (context, req) {
     await container.createIfNotExists();
     context.log('✅ Blob container ready:', BLOB_CONTAINER);
 
-    // Use the correct credentials class here:
-    const cvCreds = new CognitiveServicesCredentials(CV_KEY);
+    // ← use ApiKeyCredentials for CV
+    const cvCreds = new ApiKeyCredentials({
+      inHeader: { 'Ocp-Apim-Subscription-Key': CV_KEY }
+    });
     const cvClient = new ComputerVisionClient(cvCreds, CV_ENDPOINT);
     context.log('✅ Computer Vision client ready');
 
+    // Azure OpenAI client
     const openai = new OpenAI({
       apiKey: AZ_OPENAI_KEY,
       azure: {
@@ -75,10 +77,9 @@ module.exports = async function (context, req) {
 
     context.log('🏁 ingest-notion complete');
     context.res = { status: 200, body: "Ingestion kicked off." };
-    return;    // <-- ensure the function ends here, no further thrown exceptions
+    return;
   }
   catch (err) {
-    // **Do not throw** here: just set the 500 response and return
     context.log.error('❌ ingest-notion failed:', err.message);
     context.log.error(err.stack);
     context.res = { status: 500, body: err.message };
