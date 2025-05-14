@@ -1,8 +1,10 @@
 // ingest-notion/index.js
+console.log('🔧 ingest-notion module loaded');  
+
 const { Client: NotionClient }         = require('@notionhq/client');
 const { BlobServiceClient }            = require('@azure/storage-blob');
 const { ComputerVisionClient }         = require('@azure/cognitiveservices-computervision');
-const { CognitiveServicesCredentials } = require('@azure/ms-rest-azure-js');
+const { CognitiveServicesCredentials } = require('@azure/ms-rest-js');
 const { PineconeClient }               = require('@pinecone-database/pinecone');
 const { OpenAI }                       = require('openai');
 const path                             = require('path');
@@ -10,7 +12,7 @@ const os                               = require('os');
 const fs                               = require('fs/promises');
 const fetch                            = require('node-fetch');
 
-console.log('🔧 ingest-notion module loaded');  
+console.log('🔧 ingest-notion module constants loaded');  
 
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion (HTTP) triggered at', new Date().toISOString());
