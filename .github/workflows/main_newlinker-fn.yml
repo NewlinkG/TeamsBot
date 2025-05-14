@@ -6,9 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+# Grant permissions so we can delete old workflow runs
 permissions:
-  contents: read    # for checkout, download/upload artifacts
-  actions: write    # to delete workflow runs
+  contents: read    # for checkout & artifacts
+  actions: write    # to delete runs
 
 env:
   AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
@@ -16,6 +17,7 @@ env:
 
 jobs:
   build:
+    # <-- No `needs:` here, so this is the root job
     runs-on: windows-latest
     permissions:
       contents: read
@@ -45,8 +47,8 @@ jobs:
           path: .
 
   deploy:
-    runs-on: windows-latest
     needs: build
+    runs-on: windows-latest
     permissions:
       contents: read
       id-token: write
@@ -57,7 +59,7 @@ jobs:
         with:
           name: node-app
 
-      - name: Azure Login
+      - name: Login to Azure
         uses: azure/login@v2
         with:
           client-id:     ${{ secrets.AZUREAPPSERVICE_CLIENTID_2F09DAE5092240C4ABADB97E027F324E }}
@@ -72,11 +74,10 @@ jobs:
           slot-name:  'Production'
           package:    ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
 
-    cleanup:
-    name: Delete previous workflow runs
-    runs-on: ubuntu-latest
+  cleanup:
     needs: deploy
     if: ${{ always() }}
+    runs-on: ubuntu-latest
     permissions:
       actions: write
 
@@ -87,7 +88,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO:         ${{ github.repository }}
           CURRENT_RUN:  ${{ github.run_id }}
-          WORKFLOW_FILE: main_newlinker-fn.yml   # <— your workflow’s filename under .github/workflows
+          WORKFLOW_FILE: main_newlinker-fn.yml
         run: |
           echo "Listing runs for $WORKFLOW_FILE…"
           runs=$(curl -sS \
@@ -100,8 +101,8 @@ jobs:
             if [[ "$run_id" != "$CURRENT_RUN" ]]; then
               echo "Deleting run $run_id"
               curl -sS -X DELETE \
-                   -H "Authorization: Bearer $GITHUB_TOKEN" \
-                   "https://api.github.com/repos/$REPO/actions/runs/$run_id"
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                "https://api.github.com/repos/$REPO/actions/runs/$run_id"
             fi
           done
-          echo "Done cleaning up old runs."
+          echo "Cleanup complete."
