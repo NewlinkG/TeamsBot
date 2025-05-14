@@ -6,62 +6,16 @@ on:
       - main
   workflow_dispatch:
 
-# Give ourselves the ability to delete workflow runs
 permissions:
-  contents: read    # for checkout, download-artifact, etc.
-  actions: write    # needed to delete workflow runs
+  contents: read    # for checkout & artifacts
+  actions: write    # to delete workflow runs
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.' 
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
   NODE_VERSION: '22.x'
 
 jobs:
-  build:
-    runs-on: windows-latest
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Install and build
-        shell: pwsh
-        run: |
-          pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
-          npm install
-          npm run build --if-present
-          npm run test --if-present
-          popd
-      - uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: .
-
-  deploy:
-    runs-on: windows-latest
-    needs: build
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: node-app
-      - uses: azure/login@v2
-        with:
-          client-id:     ${{ secrets.AZUREAPPSERVICE_CLIENTID_2F09DAE5092240C4ABADB97E027F324E }}
-          tenant-id:     ${{ secrets.AZUREAPPSERVICE_TENANTID_C6FAC07F23D6442591BFB3783D706880 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E5303349CE0C4D85B9AC4E3807D3AD19 }}
-      - name: Run Azure Functions Action
-        uses: Azure/functions-action@v1
-        id: fa
-        with:
-          app-name:   'newlinker-fn'
-          slot-name:  'Production'
-          package:    ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+  # … your existing build & deploy jobs … #
 
   cleanup:
     name: Delete previous workflow runs
@@ -69,13 +23,30 @@ jobs:
     needs: deploy
     if: ${{ always() }}
     permissions:
-      actions: write    # allow deletion of runs
+      actions: write
+
     steps:
-      - name: Purge old runs of this workflow
-        uses: peter-evans/delete-workflow-runs@v2
-        with:
-          token:             ${{ secrets.GITHUB_TOKEN }}
-          workflow-id:       ${{ github.workflow }}  # deletes runs of this workflow file
-          days-before:       0                       # delete runs older than 'now' (i.e. all except current)
-          minimum-runs:      2                       # keep at least one (the current run)
-          delete-artifacts:  true                    # also remove any leftover artifacts
+      - name: “Delete all runs except this one”
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          CURRENT_RUN: ${{ github.run_id }}
+        run: |
+          echo "Fetching workflow runs for $REPO..."
+          # Grab up to 100 of the most recent runs of this workflow
+          runs=$(curl -sSf \
+                   -H "Authorization: Bearer $GITHUB_TOKEN" \
+                   -H "Accept: application/vnd.github.v3+json" \
+                   "https://api.github.com/repos/$REPO/actions/runs?workflow_id=${{ github.workflow }}&per_page=100" \
+                 | jq -r '.workflow_runs[] | .id')
+
+          for run_id in $runs; do
+            if [[ "$run_id" != "$CURRENT_RUN" ]]; then
+              echo "Deleting run $run_id …"
+              curl -sSf -X DELETE \
+                   -H "Authorization: Bearer $GITHUB_TOKEN" \
+                   "https://api.github.com/repos/$REPO/actions/runs/$run_id"
+            fi
+          done
+          echo "Cleanup complete."
