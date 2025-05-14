@@ -6,6 +6,18 @@
       "direction": "in",
       // every night at 2 AM
       "schedule": "0 0 * * * *"
+    },
+    {
+      "authLevel": "anonymous",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "req",
+      "methods": ["get","post"]
+    },
+    {
+      "type": "http",
+      "direction": "out",
+      "name": "res"
     }
   ]
 }
