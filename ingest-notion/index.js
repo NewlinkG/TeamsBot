@@ -10,6 +10,8 @@ const os                               = require('os');
 const fs                               = require('fs/promises');
 const fetch                            = require('node-fetch');
 
+console.log('🔧 ingest-notion module loaded');  
+
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion (HTTP) triggered at', new Date().toISOString());
 
