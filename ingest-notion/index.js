@@ -132,8 +132,9 @@ module.exports = async function (context, req) {
           const tmpPath  = path.join(os.tmpdir(), filename);
 
           const res = await fetch(blk.url);
-          const buf = Buffer.from(await res.arrayBuffer());
-          await fs.writeFile(tmpPath, buf);
+          const arrayBuf = await res.arrayBuffer();
+          const buf = Buffer.from(arrayBuf);
+          await fsp.writeFile(tmpPath, buf);
 
           await container.getBlockBlobClient(`att-${pid}-${filename}`).uploadFile(tmpPath);
 
