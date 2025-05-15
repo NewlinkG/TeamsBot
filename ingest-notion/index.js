@@ -10,6 +10,7 @@ const { AzureOpenAI }               = require('openai');
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
+const { Readable }                  = require('stream');
 const fetch                         = require('node-fetch');
 
 module.exports = async function (context, req) {
@@ -89,7 +90,6 @@ module.exports = async function (context, req) {
     }
     await walk(NOTION_SITE_ROOT);
     context.log(`🔍 Pages to process: ${toProcess.length}`);
-    context.log(`To process: ${toProcess}`);
 
     // 7) Process pages: fetch, OCR, embed, upsert
     for (const pid of toProcess) {
@@ -134,7 +134,7 @@ module.exports = async function (context, req) {
           const res = await fetch(blk.url);
           const arrayBuf = await res.arrayBuffer();
           const buf = Buffer.from(arrayBuf);
-          await fsp.writeFile(tmpPath, buf);
+          await fs.writeFile(tmpPath, buf);
 
           await container.getBlockBlobClient(`att-${pid}-${filename}`).uploadFile(tmpPath);
 
@@ -145,7 +145,7 @@ module.exports = async function (context, req) {
           for (const pr of ocrRes.analyzeResult.readResults||[]) {
             for (const ln of pr.lines) fullText += ln.text + '\n';
           }
-          await fsp.unlink(tmpPath);
+          await fs.unlink(tmpPath);
         }
       }
 
