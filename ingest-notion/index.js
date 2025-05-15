@@ -56,15 +56,7 @@ module.exports = async function (context, req) {
     const cvClient = new ComputerVisionClient(cvCreds, CV_ENDPOINT);
     context.log('✅ Computer Vision client ready');
 
-    const openai = new OpenAI({
-      apiKey: AZ_OPENAI_KEY,
-      azure: {
-        endpoint:       AZ_OPENAI_ENDPOINT,
-        deploymentName: AZ_OPENAI_DEPLOYMENT_ID,
-        apiVersion:     AZ_OPENAI_API_VERSION
-      }
-    });
-
+    const openai = new OpenAI();
 
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
