@@ -89,6 +89,7 @@ module.exports = async function (context, req) {
     }
     await walk(NOTION_SITE_ROOT);
     context.log(`🔍 Pages to process: ${toProcess.length}`);
+    context.log(`To process: ${toProcess}`);
 
     // 7) Process pages: fetch, OCR, embed, upsert
     for (const pid of toProcess) {
@@ -120,36 +121,41 @@ module.exports = async function (context, req) {
       }
       const blocks = await fetchBlocks(pid);
 
-      // assemble text + OCR
+      // assemble text + OCR, strip query from URL filename
       let fullText = '';
       for (const blk of blocks) {
         if (typeof blk === 'string') {
           fullText += blk + '\n';
         } else {
-          const tmp = path.join(os.tmpdir(), path.basename(blk.url));
-          const r   = await fetch(blk.url);
-          const buf = Buffer.from(await r.arrayBuffer());
-          await fs.writeFile(tmp, buf);
-          await container.getBlockBlobClient(`att-${pid}-${path.basename(tmp)}`).uploadFile(tmp);
+          const fileUrl  = new URL(blk.url);
+          const filename = path.basename(fileUrl.pathname);
+          const tmpPath  = path.join(os.tmpdir(), filename);
+
+          const res = await fetch(blk.url);
+          const buf = Buffer.from(await res.arrayBuffer());
+          await fs.writeFile(tmpPath, buf);
+
+          await container.getBlockBlobClient(`att-${pid}-${filename}`).uploadFile(tmpPath);
+
           const readOp = await cvClient.readInStream(buf);
           const ocrRes = await cvClient.getReadResult(readOp.jobId);
           for (const pr of ocrRes.analyzeResult.readResults||[]) {
             for (const ln of pr.lines) fullText += ln.text + '\n';
           }
-          await fs.unlink(tmp);
+          await fs.unlink(tmpPath);
         }
       }
+
+      context.log(fullText);
 
       // chunk & embed
       const CHUNK = 1000;
       const records = [];
       for (let i = 0; i < fullText.length; i += CHUNK) {
-        const chunk = fullText.slice(i, i + CHUNK);
-        const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: chunk });
+        const slice  = fullText.slice(i, i + CHUNK);
+        const emb    = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
         records.push({ id: `${pid}-${i}`, values: emb.data[0].embedding, metadata: { pageId: pid } });
       }
-
-      console.log("RECORDS: ", records);
 
       // upsert into Pinecone
       if (records.length) {
@@ -158,16 +164,15 @@ module.exports = async function (context, req) {
       }
 
       // save metadata blob
-      const metaClient = container.getBlockBlobClient(`page-${pid}.json`);
-      const metaContent = JSON.stringify({ lastEdited: pageMeta.last_edited_time });
-      const metaBuffer = Buffer.from(metaContent, 'utf8');
-      await metaClient.uploadData(metaBuffer, { metadata: { lastEdited: pageMeta.last_edited_time } });
+      const metaData = JSON.stringify({ lastEdited: pageMeta.last_edited_time });
+      const metaBuf  = Buffer.from(metaData, 'utf8');
+      await container.getBlockBlobClient(`page-${pid}.json`)
+        .uploadData(metaBuf, { metadata: { lastEdited: pageMeta.last_edited_time } });
     }
 
     context.log('🏁 ingest-notion complete');
     context.res = { status: 200, body: 'Ingestion kicked off.' };
-  }
-  catch (err) {
+  } catch (err) {
     context.log.error('❌ ingest-notion failed:', err.message);
     context.log.error(err.stack);
     context.res = { status: 500, body: err.message };
