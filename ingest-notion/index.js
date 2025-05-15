@@ -57,8 +57,8 @@ module.exports = async function (context, req) {
     context.log('✅ Computer Vision client ready');
 
     const openai = new OpenAI({
+      apiKey: AZ_OPENAI_KEY,
       azure: {
-        apiKey:         AZ_OPENAI_KEY,
         endpoint:       AZ_OPENAI_ENDPOINT,
         deploymentName: AZ_OPENAI_DEPLOYMENT_ID,
         apiVersion:     AZ_OPENAI_API_VERSION
