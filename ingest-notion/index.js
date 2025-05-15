@@ -60,7 +60,7 @@ module.exports = async function (context, req) {
       apiKey: process.env.OPENAI_API_KEY,         // still needed
       azure: {
         endpoint:       process.env.OPENAI_API_BASE,           // your Azure URL
-        deploymentName: process.env.AZURE_OPENAI_DEPLOYMENT_ID,// e.g. "gpt-4o-mini"
+        deploymentName: process.env.OPENAI_EMBEDDING_DEPLOYMENT_ID,// e.g. "gpt-4o-mini"
         apiVersion:     process.env.OPENAI_API_VERSION
       }
     });
