@@ -39,7 +39,6 @@ module.exports = async function (context, req) {
     if (!OPENAI_ENDPOINT)                throw new Error('Missing AZURE_OPENAI_ENDPOINT');
     if (!OPENAI_API_KEY)                 throw new Error('Missing AZURE_OPENAI_KEY');
     if (!OPENAI_API_VERSION)             throw new Error('Missing AZURE_OPENAI_API_VERSION');
-    if (!OPENAI_DEPLOYMENT_ID)           throw new Error('Missing AZURE_OPENAI_DEPLOYMENT_ID');
     if (!OPENAI_EMBEDDING_DEPLOYMENT_ID) throw new Error('Missing OPENAI_EMBEDDING_DEPLOYMENT_ID');
     if (!PINECONE_API_KEY)               throw new Error('Missing PINECONE_API_KEY');
     if (!PINECONE_INDEX_NAME)            throw new Error('Missing PINECONE_INDEX_NAME');
@@ -61,9 +60,9 @@ module.exports = async function (context, req) {
       endpoint:   OPENAI_ENDPOINT,
       apiKey:     OPENAI_API_KEY,
       apiVersion: OPENAI_API_VERSION,
-      deployment: OPENAI_DEPLOYMENT_ID
+      deployment: OPENAI_EMBEDDING_DEPLOYMENT_ID
     });
-    context.log('✅ AzureOpenAI client ready for', OPENAI_DEPLOYMENT_ID);
+    context.log('✅ AzureOpenAI client ready for', OPENAI_EMBEDDING_DEPLOYMENT_ID);
 
     const pinecone  = new Pinecone({ apiKey: PINECONE_API_KEY });
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
