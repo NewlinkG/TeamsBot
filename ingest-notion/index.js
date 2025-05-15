@@ -16,57 +16,50 @@ module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion (HTTP) triggered at', new Date().toISOString());
 
   // ———— env vars ————
-  const NOTION_TOKEN        = process.env.NOTION_TOKEN;
-  const NOTION_SITE_ROOT    = process.env.NOTION_SITE_ROOT;
-  const AZURE_STORAGE_CONN  = process.env.AZURE_STORAGE_CONNECTION_STRING;
-  const BLOB_CONTAINER      = process.env.BLOB_CONTAINER_NAME || 'raw-files';
-  const CV_ENDPOINT         = process.env.COMPUTER_VISION_ENDPOINT;
-  const CV_KEY              = process.env.COMPUTER_VISION_KEY;
-
-  const AZ_OPENAI_ENDPOINT      = process.env.AZURE_OPENAI_ENDPOINT;
-  const AZ_OPENAI_API_VERSION   = process.env.AZURE_OPENAI_API_VERSION;
-  const AZ_OPENAI_KEY           = process.env.AZURE_OPENAI_KEY;
-  const AZ_OPENAI_DEPLOYMENT_ID = process.env.AZURE_OPENAI_DEPLOYMENT_ID;
-
-  const PINECONE_API_KEY    = process.env.PINECONE_API_KEY;
-  const PINECONE_INDEX_NAME = process.env.PINECONE_INDEX_NAME;
+  const NOTION_TOKEN                     = process.env.NOTION_TOKEN;
+  const NOTION_SITE_ROOT                 = process.env.NOTION_SITE_ROOT;
+  const AZURE_STORAGE_CONN               = process.env.AZURE_STORAGE_CONNECTION_STRING;
+  const BLOB_CONTAINER                   = process.env.BLOB_CONTAINER_NAME || 'raw-files';
+  const CV_ENDPOINT                      = process.env.COMPUTER_VISION_ENDPOINT;
+  const CV_KEY                           = process.env.COMPUTER_VISION_KEY;
+  const OPENAI_API_TYPE                  = process.env.OPENAI_API_TYPE;
+  const OPENAI_API_BASE                  = process.env.OPENAI_API_BASE;
+  const OPENAI_API_VERSION               = process.env.OPENAI_API_VERSION;
+  const OPENAI_API_KEY                   = process.env.OPENAI_API_KEY;
+  const OPENAI_EMBEDDING_DEPLOYMENT_ID   = process.env.OPENAI_EMBEDDING_DEPLOYMENT_ID;
+  const PINECONE_API_KEY                 = process.env.PINECONE_API_KEY;
+  const PINECONE_INDEX_NAME              = process.env.PINECONE_INDEX_NAME;
 
   try {
     // 0) Validar env vars
-    if (!NOTION_TOKEN)        throw new Error('Missing NOTION_TOKEN');
-    if (!NOTION_SITE_ROOT)    throw new Error('Missing NOTION_SITE_ROOT');
-    if (!AZURE_STORAGE_CONN)  throw new Error('Missing AZURE_STORAGE_CONNECTION_STRING');
-    if (!CV_ENDPOINT || !CV_KEY)  throw new Error('Missing COMPUTER_VISION_ENDPOINT or COMPUTERI_VISION_KEY');
-    if (!AZ_OPENAI_ENDPOINT || !AZ_OPENAI_KEY || !AZ_OPENAI_DEPLOYMENT_ID)
-      throw new Error('Missing one of AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY, or AZURE_OPENAI_DEPLOYMENT_ID');
-    if (!PINECONE_API_KEY)    throw new Error('Missing PINECONE_API_KEY');
-    if (!PINECONE_INDEX_NAME) throw new Error('Missing PINECONE_INDEX_NAME');
+    if (!NOTION_TOKEN)                   throw new Error('Missing NOTION_TOKEN');
+    if (!NOTION_SITE_ROOT)               throw new Error('Missing NOTION_SITE_ROOT');
+    if (!AZURE_STORAGE_CONN)             throw new Error('Missing AZURE_STORAGE_CONNECTION_STRING');
+    if (!CV_ENDPOINT || !CV_KEY)         throw new Error('Missing COMPUTER_VISION_ENDPOINT or COMPUTER_VISION_KEY');
+    if (!OPENAI_API_TYPE)                throw new Error('Missing OPENAI_API_TYPE');
+    if (!OPENAI_API_BASE)                throw new Error('Missing OPENAI_API_BASE');
+    if (!OPENAI_API_VERSION)             throw new Error('Missing OPENAI_API_VERSION');
+    if (!OPENAI_API_KEY)                 throw new Error('Missing OPENAI_API_KEY');
+    if (!OPENAI_EMBEDDING_DEPLOYMENT_ID) throw new Error('Missing OPENAI_EMBEDDING_DEPLOYMENT_ID');
+    if (!PINECONE_API_KEY)               throw new Error('Missing PINECONE_API_KEY');
+    if (!PINECONE_INDEX_NAME)            throw new Error('Missing PINECONE_INDEX_NAME');
 
     // 1) Inicializar clientes
-    const notion = new NotionClient({ auth: NOTION_TOKEN });
-
+    const notion    = new NotionClient({ auth: NOTION_TOKEN });
     const blobSvc   = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONN);
     const container = blobSvc.getContainerClient(BLOB_CONTAINER);
     await container.createIfNotExists();
     context.log('✅ Blob container ready:', BLOB_CONTAINER);
 
-    const cvCreds = new ApiKeyCredentials({
-      inHeader: { 'Ocp-Apim-Subscription-Key': CV_KEY }
-    });
-    const cvClient = new ComputerVisionClient(cvCreds, CV_ENDPOINT);
+    const cvCreds   = new ApiKeyCredentials({ inHeader: { 'Ocp-Apim-Subscription-Key': CV_KEY }});
+    const cvClient  = new ComputerVisionClient(cvCreds, CV_ENDPOINT);
     context.log('✅ Computer Vision client ready');
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,         // still needed
-      azure: {
-        endpoint:       process.env.OPENAI_API_BASE,           // your Azure URL
-        deploymentName: process.env.OPENAI_EMBEDDING_DEPLOYMENT_ID,// e.g. "gpt-4o-mini"
-        apiVersion:     process.env.OPENAI_API_VERSION
-      }
-    });
+    // Azure OpenAI client (env-driven)
+    const openai    = new OpenAI();
+    context.log('✅ Azure OpenAI client ready');
 
-
-    const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
+    const pinecone  = new Pinecone({ apiKey: PINECONE_API_KEY });
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
     context.log('✅ Pinecone index ready:', PINECONE_INDEX_NAME);
 
@@ -81,7 +74,7 @@ module.exports = async function (context, req) {
       do {
         const resp = await notion.blocks.children.list({ block_id: nodeId, start_cursor: cursor, page_size: 100 });
         for (const block of resp.results) {
-          if (block.type === 'child_page') await walk(block.id);
+          if (block.type === 'child_page')      await walk(block.id);
           if (block.type === 'child_database') {
             let dbCursor;
             do {
@@ -101,8 +94,8 @@ module.exports = async function (context, req) {
     for (const id of toProcess) {
       // 3.a) Change detection
       const metaBlob = container.getBlobClient(`page-${id}.json`);
-      const props = await metaBlob.getProperties().catch(()=>undefined);
-      const page = await notion.pages.retrieve({ page_id: id });
+      const props    = await metaBlob.getProperties().catch(()=>undefined);
+      const page     = await notion.pages.retrieve({ page_id: id });
       const lastEdited = page.last_edited_time;
       if (props?.metadata?.lastEdited === lastEdited) {
         context.log(`↩️ skipping unchanged ${id}`);
@@ -124,18 +117,20 @@ module.exports = async function (context, req) {
         } while (cur);
         return acc;
       }
-      const blocks = await fetchBlocks(id);
-      let fullText = '';
+      const blocks  = await fetchBlocks(id);
+      let fullText  = '';
       for (const frag of blocks) {
-        if (typeof frag === 'string') { fullText += frag + '\n'; }
-        else {
-          const tmp = path.join(os.tmpdir(), path.basename(frag.file));
-          const res = await fetch(frag.file);
-          await fs.writeFile(tmp, Buffer.from(await res.arrayBuffer()));
-          const blobName = `attachment-${id}-${path.basename(tmp)}`;
+        if (typeof frag === 'string') {
+          fullText += frag + '\n';
+        } else {
+          const tmp     = path.join(os.tmpdir(), path.basename(frag.file));
+          const res     = await fetch(frag.file);
+          const buffer  = Buffer.from(await res.arrayBuffer());
+          await fs.writeFile(tmp, buffer);
+          const blobName= `attachment-${id}-${path.basename(tmp)}`;
           await container.getBlockBlobClient(blobName).uploadFile(tmp);
-          const readOp = await cvClient.readInStream(await fs.readFile(tmp));
-          const ocr = await cvClient.getReadResult(readOp.jobId);
+          const readOp  = await cvClient.readInStream(buffer);
+          const ocr     = await cvClient.getReadResult(readOp.jobId);
           for (const p of ocr.analyzeResult.readResults || []) {
             for (const line of p.lines) fullText += line.text + '\n';
           }
@@ -144,10 +139,10 @@ module.exports = async function (context, req) {
       }
       // 3.c) Embed & upsert
       const CHUNK_SIZE = 1000;
-      const vectors = [];
+      const vectors    = [];
       for (let i = 0; i < fullText.length; i += CHUNK_SIZE) {
         const chunk = fullText.slice(i, i + CHUNK_SIZE);
-        const embed = await openai.embeddings.create({ model: AZ_OPENAI_DEPLOYMENT_ID, input: chunk });
+        const embed = await openai.embeddings.create({ model: OPENAI_EMBEDDING_DEPLOYMENT_ID, input: chunk });
         vectors.push({ id: `${id}-${i/CHUNK_SIZE}`, values: embed.data[0].embedding, metadata: { pageId: id } });
       }
       await pineIndex.upsert({ vectors });
@@ -165,5 +160,6 @@ module.exports = async function (context, req) {
     context.log.error('❌ ingest-notion failed:', err.message);
     context.log.error(err.stack);
     context.res = { status: 500, body: err.message };
+    return;
   }
 };
