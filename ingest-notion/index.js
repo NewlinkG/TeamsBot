@@ -149,6 +149,8 @@ module.exports = async function (context, req) {
         records.push({ id: `${pid}-${i}`, values: emb.data[0].embedding, metadata: { pageId: pid } });
       }
 
+      console.log("RECORDS: ", records);
+
       // upsert into Pinecone
       if (records.length) {
         await pineIndex.upsert({ records });
