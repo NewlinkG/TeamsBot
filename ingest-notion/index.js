@@ -137,12 +137,14 @@ module.exports = async function (context, req) {
 
           await container.getBlockBlobClient(`att-${pid}-${filename}`).uploadFile(tmpPath);
 
-          const readOp = await cvClient.readInStream(buf);
+          // use a stream for OCR so jobId is set
+          const stream = Readable.from(buf);
+          const readOp = await cvClient.readInStream(stream);
           const ocrRes = await cvClient.getReadResult(readOp.jobId);
           for (const pr of ocrRes.analyzeResult.readResults||[]) {
             for (const ln of pr.lines) fullText += ln.text + '\n';
           }
-          await fs.unlink(tmpPath);
+          await fsp.unlink(tmpPath);
         }
       }
 
