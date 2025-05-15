@@ -147,7 +147,7 @@ module.exports = async function (context, req) {
         const embed = await openai.embeddings.create({ model: OPENAI_EMBEDDING_DEPLOYMENT_ID, input: chunk });
         vectors.push({ id: `${id}-${i/CHUNK_SIZE}`, values: embed.data[0].embedding, metadata: { pageId: id } });
       }
-      await pineIndex.upsert({ vectors });
+      await pineIndex.upsert({ records: vectors });
       // save metadata
       const body = JSON.stringify({ id, lastEdited, text: fullText });
       await container.uploadBlockBlob(`page-${id}.json`, body, { metadata: { lastEdited } });
