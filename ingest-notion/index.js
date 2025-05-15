@@ -70,8 +70,7 @@ module.exports = async function (context, req) {
 
     // Pinecone (v6+) wants apiKey + environment in its constructor
     const pinecone = new Pinecone({
-      apiKey:      process.env.PINECONE_API_KEY,
-      environment: process.env.PINECONE_ENVIRONMENT
+      apiKey:      process.env.PINECONE_API_KEY
     });
 
     // grab your index
