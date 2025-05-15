@@ -153,7 +153,7 @@ module.exports = async function (context, req) {
 
       // upsert into Pinecone
       if (records.length) {
-        await pineIndex.upsert({ vectors: records });
+        await pineIndex.upsert(records);
         context.log(`✅ upserted ${records.length} vectors for ${pid}`);
       }
 
