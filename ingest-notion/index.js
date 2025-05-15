@@ -19,7 +19,7 @@ module.exports = async function (context, req) {
   const NOTION_TOKEN        = process.env.NOTION_TOKEN;
   const NOTION_SITE_ROOT    = process.env.NOTION_SITE_ROOT;
   const AZURE_STORAGE_CONN  = process.env.AZURE_STORAGE_CONNECTION_STRING;
-  const BLOB_CONTAINER      = process.env.BLOB_CONTAINER_NAME || 'notion-assets';
+  const BLOB_CONTAINER      = process.env.BLOB_CONTAINER_NAME || 'raw-files';
   const CV_ENDPOINT         = process.env.COMPUTER_VISION_ENDPOINT;
   const CV_KEY              = process.env.COMPUTER_VISION_KEY;
 
@@ -57,13 +57,14 @@ module.exports = async function (context, req) {
     context.log('✅ Computer Vision client ready');
 
     const openai = new OpenAI({
-      apiKey: AZ_OPENAI_KEY,
       azure: {
+        apiKey:         AZ_OPENAI_KEY,
         endpoint:       AZ_OPENAI_ENDPOINT,
         deploymentName: AZ_OPENAI_DEPLOYMENT_ID,
         apiVersion:     AZ_OPENAI_API_VERSION
       }
     });
+
 
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
