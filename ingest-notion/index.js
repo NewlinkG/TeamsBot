@@ -158,11 +158,10 @@ module.exports = async function (context, req) {
       }
 
       // save metadata blob
-      await container.uploadBlockBlob(
-        `page-${pid}.json`,
-        JSON.stringify({ lastEdited: pageMeta.last_edited_time }),
-        { metadata: { lastEdited: pageMeta.last_edited_time }}
-      );
+      const metaClient = container.getBlockBlobClient(`page-${pid}.json`);
+      const metaContent = JSON.stringify({ lastEdited: pageMeta.last_edited_time });
+      const metaBuffer = Buffer.from(metaContent, 'utf8');
+      await metaClient.uploadData(metaBuffer, { metadata: { lastEdited: pageMeta.last_edited_time } });
     }
 
     context.log('🏁 ingest-notion complete');
