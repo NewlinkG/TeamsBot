@@ -58,9 +58,8 @@ module.exports = async function (context, req) {
     context.log('✅ AzureOpenAI (embeddings) ready');
 
     // 5) Pinecone client (no environment needed)
-    const pinecone = new PineconeClient();
-    await pinecone.init({ apiKey: env.PINECONE_API_KEY });
-    const pineIndex = pinecone.Index(env.PINECONE_INDEX_NAME);
+    const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
+    const pineIndex = pinecone.index(PINECONE_INDEX_NAME);
     context.log('✅ Pinecone index ready');
 
     // 6) Collect Notion pages
