@@ -78,12 +78,16 @@ module.exports = async function (context, req) {
       do {
         const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
         for (const b of resp.results) {
+          context.log('Notion block type', b.type);
           if (b.type === 'child_page') await walk(b.id);
           else if (b.type === 'child_database') {
             let dbCur;
             do {
               const qr = await notion.databases.query({ database_id: b.id, start_cursor: dbCur, page_size: 100 });
-              for (const e of qr.results) await walk(e.id);
+              for (const e of qr.results) {
+                context.log('Notion block type', e.id);
+                await walk(e.id);
+              }
               dbCur = qr.has_more ? qr.next_cursor : undefined;
             } while (dbCur);
           }
@@ -95,12 +99,16 @@ module.exports = async function (context, req) {
 
     // 2) Process each page
     for (const pid of toProcess) {
+      context.log('Processing page', pid);
       // check page-level metadata for incremental
       const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
       const props      = await metaClient.getProperties().catch(() => undefined);
       const pageMeta   = await notion.pages.retrieve({ page_id: pid });
       const lastKey    = 'lastedited';
-      if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) continue;
+      if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) {
+        context.log('Skipping unchanged page', pid);
+        continue;
+      }
 
       // fetch blocks
       async function fetchBlocks(id, acc = []) {
@@ -108,6 +116,7 @@ module.exports = async function (context, req) {
         do {
           const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
           for (const b of resp.results) {
+            context.log('Notion block type', b.type);
             if (['paragraph','heading_1','heading_2'].includes(b.type)) {
               acc.push({ type: 'text', text: b[b.type].rich_text.map(t => t.plain_text).join('') });
             } else if (b.type === 'image') {
@@ -126,8 +135,14 @@ module.exports = async function (context, req) {
       let fullText = '';
 
       for (const blk of blocks) {
-        if (blk.type === 'text') { fullText += blk.text + '\n'; continue; }
+        context.log('Internal block type', blk.type);
+        if (blk.type === 'text') {
+          context.log('RUNNING TEXT');
+          fullText += blk.text + '\n';
+          continue;
+        }
 
+        context.log('RUNNING', blk.type.toUpperCase());
         const filename = path.basename(new URL(blk.url).pathname);
         const tmpPath  = path.join(os.tmpdir(), filename);
         const res      = await fetch(blk.url);
@@ -137,6 +152,7 @@ module.exports = async function (context, req) {
 
         if (blk.type === 'image') {
           // OCR
+          context.log('RUNNING IMAGE');
           const readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath));
           const operationId = readResp.operationLocation.split('/').pop();
           let ocrRes;
@@ -145,17 +161,19 @@ module.exports = async function (context, req) {
             catch (err) {
               if (err instanceof RestError && err.response.headers.get('retry-after')) {
                 const wait = parseInt(err.response.headers.get('retry-after'),10)*1000||3000;
-                await sleep(wait); continue;
+                context.log.warn(`Rate limited; retrying after ${wait}ms`);
+                await sleep(wait);
+                continue;
               }
               throw err;
             }
             const st = ocrRes.status.toLowerCase();
-            if (st==='succeeded'||st==='failed') break;
+            if (st === 'succeeded' || st === 'failed') break;
             await sleep(3000);
           }
-          if (ocrRes.status.toLowerCase()==='succeeded') {
+          if (ocrRes.status.toLowerCase() === 'succeeded') {
             let ocrText = '';
-            for (const pg of ocrRes.analyzeResult.readResults||[]) for (const ln of pg.lines) ocrText+=ln.text+'\n';
+            for (const pg of ocrRes.analyzeResult.readResults||[]) for (const ln of pg.lines) ocrText += ln.text + '\n';
             // save OCR output
             await extractedContainer.getBlockBlobClient(`ocr-${pid}-${filename}.txt`)
               .upload(ocrText, ocrText.length);
@@ -163,10 +181,11 @@ module.exports = async function (context, req) {
           }
         } else {
           // Document Intelligence
+          context.log('RUNNING OTHER');
           const poller = await frClient.beginAnalyzeDocument('prebuilt-read', tmpPath);
           const result = await poller.pollUntilDone();
           let fileText = '';
-          for (const pg of result.pages||[]) for (const ln of pg.lines) fileText+=ln.content+'\n';
+          for (const pg of result.pages||[]) for (const ln of pg.lines) fileText += ln.content + '\n';
           // save DI output
           await extractedContainer.getBlockBlobClient(`txt-${pid}-${filename}.txt`)
             .upload(fileText, fileText.length);
@@ -175,18 +194,21 @@ module.exports = async function (context, req) {
         await fs.unlink(tmpPath);
       }
 
+      context.log(fullText);
+
       // chunk & embed
-      const CHUNK = 1000; const records = [];
-      for (let i=0;i<fullText.length;i+=CHUNK) {
-        const slice = fullText.slice(i,i+CHUNK);
-        const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
-        records.push({ id:`${pid}-${i}`, values:emb.data[0].embedding, metadata:{ pageId:pid } });
+      const CHUNK = 1000;
+      const records = [];
+      for (let i = 0; i < fullText.length; i += CHUNK) {
+        const slice = fullText.slice(i, i + CHUNK);
+        const emb = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
+        records.push({ id: `${pid}-${i}`, values: emb.data[0].embedding, metadata: { pageId: pid } });
       }
       if (records.length) await pineIndex.upsert(records);
 
       // save page metadata
       const md = { [lastKey]: pageMeta.last_edited_time };
-      const metaBuf = Buffer.from(JSON.stringify(md),'utf8');
+      const metaBuf = Buffer.from(JSON.stringify(md), 'utf8');
       await rawContainer.getBlockBlobClient(`page-${pid}.json`)
         .uploadData(metaBuf, { metadata: md });
     }
