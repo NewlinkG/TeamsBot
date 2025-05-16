@@ -11,7 +11,6 @@ const { DocumentAnalysisClient, AzureKeyCredential } = require('@azure/ai-form-r
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
-const { Readable }                  = require('stream');
 const fetch                         = require('node-fetch');
 
 module.exports = async function (context, req) {
@@ -93,20 +92,21 @@ module.exports = async function (context, req) {
     }
     await walk(NOTION_SITE_ROOT);
 
-    // 2) Process
+    // 2) Process each page
     for (const pid of toProcess) {
       const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
       const props = await metaClient.getProperties().catch(() => undefined);
       const pageMeta = await notion.pages.retrieve({ page_id: pid });
       if (props?.metadata?.lastEdited === pageMeta.last_edited_time) continue;
 
+      // fetch blocks
       async function fetchBlocks(id, acc = []) {
         let cursor;
         do {
           const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
           for (const b of resp.results) {
             if (['paragraph','heading_1','heading_2'].includes(b.type)) {
-              acc.push({ type: 'text', text: b[b.type].rich_text.map(t=>t.plain_text).join('') });
+              acc.push({ type: 'text', text: b[b.type].rich_text.map(t => t.plain_text).join('') });
             } else if (b.type === 'image') {
               acc.push({ type: 'image', url: b.image.file.url });
             } else if (b.type === 'file') {
@@ -137,17 +137,22 @@ module.exports = async function (context, req) {
         await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${filename}`).uploadFile(tmpPath);
 
         if (blk.type === 'image') {
-          const stream = Readable.from(buf);
-          const readOp = await cvClient.readInStream(stream);
+          // pass buffer directly for OCR
+          const readOp = await cvClient.readInStream(buf);
           const ocrRes = await cvClient.getReadResult(readOp.jobId);
-          for (const pr of ocrRes.analyzeResult.readResults||[]) for (const ln of pr.lines) fullText += ln.text + '\n';
+          for (const pr of ocrRes.analyzeResult.readResults || []) {
+            for (const ln of pr.lines) fullText += ln.text + '\n';
+          }
         } else {
-          // use file path so DI infers content type
+          // let DI infer type via file path
           const poller = await frClient.beginAnalyzeDocument('prebuilt-read', tmpPath);
           const result = await poller.pollUntilDone();
           let fileText = '';
-          for (const page of result.pages||[]) for (const line of page.lines) fileText += line.content + '\n';
-          await extractedContainer.getBlockBlobClient(`txt-${pid}-${filename}.txt`).upload(fileText, fileText.length);
+          for (const page of result.pages || []) {
+            for (const line of page.lines) fileText += line.content + '\n';
+          }
+          await extractedContainer.getBlockBlobClient(`txt-${pid}-${filename}.txt`)
+            .upload(fileText, fileText.length);
           fullText += fileText + '\n';
         }
         await fs.unlink(tmpPath);
@@ -156,21 +161,22 @@ module.exports = async function (context, req) {
       const CHUNK = 1000;
       const records = [];
       for (let i = 0; i < fullText.length; i += CHUNK) {
-        const slice = fullText.slice(i, i+CHUNK);
-        const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
-        records.push({ id: `${pid}-${i}`, values: emb.data[0].embedding, metadata:{pageId:pid}});
+        const slice = fullText.slice(i, i + CHUNK);
+        const emb = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
+        records.push({ id: `${pid}-${i}`, values: emb.data[0].embedding, metadata: { pageId: pid } });
       }
       if (records.length) await pineIndex.upsert(records);
 
       const bodyBuf = Buffer.from(JSON.stringify({ lastEdited: pageMeta.last_edited_time }), 'utf8');
-      await rawContainer.getBlockBlobClient(`page-${pid}.json`).uploadData(bodyBuf, { metadata:{lastEdited:pageMeta.last_edited_time}});
+      await rawContainer.getBlockBlobClient(`page-${pid}.json`)
+        .uploadData(bodyBuf, { metadata: { lastEdited: pageMeta.last_edited_time } });
     }
 
     context.log('🏁 ingest-notion complete');
-    context.res = { status:200, body:'Ingestion complete.' };
-  } catch(err) {
+    context.res = { status: 200, body: 'Ingestion complete.' };
+  } catch (err) {
     context.log.error('❌ ingest-notion failed:', err.message);
     context.log.error(err.stack);
-    context.res = { status:500, body:err.message };
+    context.res = { status: 500, body: err.message };
   }
 };
