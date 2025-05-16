@@ -95,10 +95,12 @@ module.exports = async function (context, req) {
 
     // 2) Process each page
     for (const pid of toProcess) {
+      // check page-level metadata for incremental
       const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
       const props      = await metaClient.getProperties().catch(() => undefined);
       const pageMeta   = await notion.pages.retrieve({ page_id: pid });
-      if (props?.metadata?.lastEdited === pageMeta.last_edited_time) continue;
+      const lastKey    = 'lastedited';
+      if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) continue;
 
       // fetch blocks
       async function fetchBlocks(id, acc = []) {
@@ -113,8 +115,6 @@ module.exports = async function (context, req) {
             } else if (b.type === 'file') {
               acc.push({ type: 'file', url: b.file.file.url });
             }
-            context.log("Notion block type", b.type);
-
             if (b.has_children) await fetchBlocks(b.id, acc);
           }
           cursor = resp.has_more ? resp.next_cursor : undefined;
@@ -126,8 +126,7 @@ module.exports = async function (context, req) {
       let fullText = '';
 
       for (const blk of blocks) {
-        context.log("Internal block type", blk.type);
-        if (blk.type === 'text') { fullText += blk.text + '\n'; context.log("RUNNING TEXT"); continue; }
+        if (blk.type === 'text') { fullText += blk.text + '\n'; continue; }
 
         const filename = path.basename(new URL(blk.url).pathname);
         const tmpPath  = path.join(os.tmpdir(), filename);
@@ -137,62 +136,59 @@ module.exports = async function (context, req) {
         await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${filename}`).uploadFile(tmpPath);
 
         if (blk.type === 'image') {
-          context.log("RUNNING IMAGE");
-          const readResponse = await cvClient.readInStream(
-            () => fsSync.createReadStream(tmpPath)
-          );
-          const operationId = readResponse.operationLocation.split('/').pop();
+          // OCR
+          const readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath));
+          const operationId = readResp.operationLocation.split('/').pop();
           let ocrRes;
           while (true) {
-            try {
-              ocrRes = await cvClient.getReadResult(operationId);
-            } catch (err) {
-              if (err instanceof RestError && err.response?.headers.get('retry-after')) {
-                const retrySec = parseInt(err.response.headers.get('retry-after'), 10);
-                const waitMs = (isNaN(retrySec) ? 3 : retrySec) * 1000;
-                context.log.warn(`Rate limited; retrying after ${waitMs}ms`);
-                await sleep(waitMs);
-                continue;
+            try { ocrRes = await cvClient.getReadResult(operationId); }
+            catch (err) {
+              if (err instanceof RestError && err.response.headers.get('retry-after')) {
+                const wait = parseInt(err.response.headers.get('retry-after'),10)*1000||3000;
+                await sleep(wait); continue;
               }
               throw err;
             }
-            const st = ocrRes.status?.toLowerCase();
-            if (st === 'succeeded' || st === 'failed') break;
+            const st = ocrRes.status.toLowerCase();
+            if (st==='succeeded'||st==='failed') break;
             await sleep(3000);
           }
-          if (ocrRes.status?.toLowerCase() === 'succeeded') {
-            for (const page of ocrRes.analyzeResult.readResults || []) {
-              for (const line of page.lines) fullText += line.text + '\n';
-            }
+          if (ocrRes.status.toLowerCase()==='succeeded') {
+            let ocrText = '';
+            for (const pg of ocrRes.analyzeResult.readResults||[]) for (const ln of pg.lines) ocrText+=ln.text+'\n';
+            // save OCR output
+            await extractedContainer.getBlockBlobClient(`ocr-${pid}-${filename}.txt`)
+              .upload(ocrText, ocrText.length);
+            fullText += ocrText;
           }
         } else {
-          context.log("RUNNING OTHER");
+          // Document Intelligence
           const poller = await frClient.beginAnalyzeDocument('prebuilt-read', tmpPath);
           const result = await poller.pollUntilDone();
           let fileText = '';
-          for (const pg of result.pages || []) {
-            for (const ln of pg.lines) fileText += ln.content + '\n';
-          }
+          for (const pg of result.pages||[]) for (const ln of pg.lines) fileText+=ln.content+'\n';
+          // save DI output
           await extractedContainer.getBlockBlobClient(`txt-${pid}-${filename}.txt`)
             .upload(fileText, fileText.length);
-          fullText += fileText + '\n';
+          fullText += fileText;
         }
         await fs.unlink(tmpPath);
       }
 
       // chunk & embed
-      const CHUNK   = 1000; const records = [];
-      for (let i = 0; i < fullText.length; i += CHUNK) {
-        const slice = fullText.slice(i, i + CHUNK);
+      const CHUNK = 1000; const records = [];
+      for (let i=0;i<fullText.length;i+=CHUNK) {
+        const slice = fullText.slice(i,i+CHUNK);
         const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
-        records.push({ id: `${pid}-${i}`, values: emb.data[0].embedding, metadata: { pageId: pid } });
+        records.push({ id:`${pid}-${i}`, values:emb.data[0].embedding, metadata:{ pageId:pid } });
       }
       if (records.length) await pineIndex.upsert(records);
 
-      // save metadata
-      const metaBuf = Buffer.from(JSON.stringify({ lastEdited: pageMeta.last_edited_time }), 'utf8');
+      // save page metadata
+      const md = { [lastKey]: pageMeta.last_edited_time };
+      const metaBuf = Buffer.from(JSON.stringify(md),'utf8');
       await rawContainer.getBlockBlobClient(`page-${pid}.json`)
-        .uploadData(metaBuf, { metadata: { lastEdited: pageMeta.last_edited_time } });
+        .uploadData(metaBuf, { metadata: md });
     }
 
     context.log('🏁 ingest-notion complete');
