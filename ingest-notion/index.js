@@ -7,6 +7,7 @@ const { ComputerVisionClient }      = require('@azure/cognitiveservices-computer
 const { ApiKeyCredentials }         = require('@azure/ms-rest-js');
 const { Pinecone }                  = require('@pinecone-database/pinecone');
 const { AzureOpenAI }               = require('openai');
+const { FormRecognizerClient, AzureKeyCredential } = require('@azure/ai-form-recognizer');
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
@@ -34,37 +35,39 @@ module.exports = async function (context, req) {
     const OPENAI_EMBED_MODEL  = E('OPENAI_EMBEDDING_DEPLOYMENT_ID');
     const PINECONE_API_KEY    = E('PINECONE_API_KEY');
     const PINECONE_INDEX_NAME = E('PINECONE_INDEX_NAME');
-    const BLOB_CONTAINER      = process.env.BLOB_CONTAINER_NAME || 'raw-files';
+    const DI_ENDPOINT         = E('DI_ENDPOINT');
+    const DI_KEY              = E('DI_KEY');
+    const RAW_CONTAINER       = process.env.BLOB_CONTAINER_NAME || 'raw-files';
 
-    // 1) Notion client
+    // Clients
     const notion = new NotionClient({ auth: NOTION_TOKEN });
+    const blobSvc = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONN);
+    const rawContainer = blobSvc.getContainerClient(RAW_CONTAINER);
+    await rawContainer.createIfNotExists();
+    const extractedContainer = blobSvc.getContainerClient('extracted-text');
+    await extractedContainer.createIfNotExists();
 
-    // 2) Blob storage
-    const blobSvc   = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONN);
-    const container = blobSvc.getContainerClient(BLOB_CONTAINER);
-    await container.createIfNotExists();
-    context.log('✅ Blob container ready');
+    const cvClient = new ComputerVisionClient(
+      new ApiKeyCredentials({ inHeader: { 'Ocp-Apim-Subscription-Key': CV_KEY }}),
+      CV_ENDPOINT
+    );
 
-    // 3) Computer Vision client
-    const cvCreds  = new ApiKeyCredentials({ inHeader: { 'Ocp-Apim-Subscription-Key': CV_KEY }});
-    const cvClient = new ComputerVisionClient(cvCreds, CV_ENDPOINT);
-    context.log('✅ Computer Vision client ready');
-
-    // 4) Azure OpenAI client (embeddings)
     const openai = new AzureOpenAI({
       endpoint:   OPENAI_ENDPOINT,
       apiKey:     OPENAI_API_KEY,
       apiVersion: OPENAI_API_VERSION,
       deployment: OPENAI_EMBED_MODEL
     });
-    context.log('✅ AzureOpenAI (embeddings) ready');
 
-    // 5) Pinecone client (v6)
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
-    context.log('✅ Pinecone index ready');
 
-    // 6) Gather Notion pages
+    const frClient = new FormRecognizerClient(
+      DI_ENDPOINT,
+      new AzureKeyCredential(DI_KEY)
+    );
+
+    // 1) Gather pages
     const seen = new Set();
     const toProcess = [];
     async function walk(id) {
@@ -88,30 +91,29 @@ module.exports = async function (context, req) {
         cursor = resp.has_more ? resp.next_cursor : undefined;
       } while (cursor);
     }
+    await rawContainer.createIfNotExists();
+    await extractedContainer.createIfNotExists();
     await walk(NOTION_SITE_ROOT);
-    context.log(`🔍 Pages to process: ${toProcess.length}`);
 
-    // 7) Process pages: fetch, OCR, embed, upsert
+    // 2) Process each page
     for (const pid of toProcess) {
-      // change detection
-      const blobClient = container.getBlobClient(`page-${pid}.json`);
-      const props      = await blobClient.getProperties().catch(() => undefined);
-      const pageMeta   = await notion.pages.retrieve({ page_id: pid });
-      if (props?.metadata?.lastEdited === pageMeta.last_edited_time) {
-        context.log(`↩️ skipping unchanged ${pid}`);
-        continue;
-      }
+      const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
+      const props = await metaClient.getProperties().catch(() => undefined);
+      const pageMeta = await notion.pages.retrieve({ page_id: pid });
+      if (props?.metadata?.lastEdited === pageMeta.last_edited_time) continue;
 
-      // fetch content blocks
+      // fetch blocks
       async function fetchBlocks(id, acc = []) {
         let cursor;
         do {
           const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
           for (const b of resp.results) {
             if (['paragraph','heading_1','heading_2'].includes(b.type)) {
-              acc.push(b[b.type].rich_text.map(t=>t.plain_text).join(''));
-            } else if (['image','file'].includes(b.type)) {
-              acc.push({ url: b[b.type].file.url });
+              acc.push({ type: 'text', text: b[b.type].rich_text.map(t=>t.plain_text).join('') });
+            } else if (b.type === 'image') {
+              acc.push({ type: 'image', url: b.image.file.url });
+            } else if (b.type === 'file') {
+              acc.push({ type: 'file', url: b.file.file.url });
             }
             if (b.has_children) await fetchBlocks(b.id, acc);
           }
@@ -119,63 +121,75 @@ module.exports = async function (context, req) {
         } while (cursor);
         return acc;
       }
-      const blocks = await fetchBlocks(pid);
 
-      // assemble text + OCR, strip query from URL filename
+      const blocks = await fetchBlocks(pid);
       let fullText = '';
+
       for (const blk of blocks) {
-        if (typeof blk === 'string') {
-          fullText += blk + '\n';
+        if (blk.type === 'text') {
+          fullText += blk.text + '\n';
+
         } else {
           const fileUrl  = new URL(blk.url);
           const filename = path.basename(fileUrl.pathname);
           const tmpPath  = path.join(os.tmpdir(), filename);
 
+          // download
           const res = await fetch(blk.url);
-          const arrayBuf = await res.arrayBuffer();
-          const buf = Buffer.from(arrayBuf);
+          const buf = Buffer.from(await res.arrayBuffer());
           await fs.writeFile(tmpPath, buf);
 
-          await container.getBlockBlobClient(`att-${pid}-${filename}`).uploadFile(tmpPath);
+          // save raw
+          await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${filename}`).uploadFile(tmpPath);
 
-          // use a stream for OCR so jobId is set
-          const stream = Readable.from(buf);
-          const readOp = await cvClient.readInStream(stream);
-          const ocrRes = await cvClient.getReadResult(readOp.jobId);
-          for (const pr of ocrRes.analyzeResult.readResults||[]) {
-            for (const ln of pr.lines) fullText += ln.text + '\n';
+          if (blk.type === 'image') {
+            // OCR image
+            const stream = Readable.from(buf);
+            const readOp = await cvClient.readInStream(stream);
+            const ocrRes = await cvClient.getReadResult(readOp.jobId);
+            for (const pr of ocrRes.analyzeResult.readResults||[]) {
+              for (const ln of pr.lines) fullText += ln.text + '\n';
+            }
+          } else if (blk.type === 'file') {
+            // extract text via Form Recognizer
+            const poller = await frClient.beginAnalyzeDocument('prebuilt-read', tmpPath, { onProgress: () => {} });
+            const result = await poller.pollUntilDone();
+            let fileText = '';
+            for (const page of result.pages||[]) {
+              for (const line of page.lines) fileText += line.content + '\n';
+            }
+            // save extracted-text
+            await extractedContainer.getBlockBlobClient(`txt-${pid}-${filename}.txt`)
+                .upload(fileText, fileText.length);
+            fullText += fileText + '\n';
           }
+
           await fs.unlink(tmpPath);
         }
       }
 
-      context.log(fullText);
-
-      // chunk & embed
+      // embeddings & upsert
       const CHUNK = 1000;
       const records = [];
       for (let i = 0; i < fullText.length; i += CHUNK) {
-        const slice  = fullText.slice(i, i + CHUNK);
-        const emb    = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
+        const slice = fullText.slice(i, i+CHUNK);
+        const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
         records.push({ id: `${pid}-${i}`, values: emb.data[0].embedding, metadata: { pageId: pid } });
       }
-
-      // upsert into Pinecone
       if (records.length) {
         await pineIndex.upsert(records);
-        context.log(`✅ upserted ${records.length} vectors for ${pid}`);
       }
 
-      // save metadata blob
-      const metaData = JSON.stringify({ lastEdited: pageMeta.last_edited_time });
-      const metaBuf  = Buffer.from(metaData, 'utf8');
-      await container.getBlockBlobClient(`page-${pid}.json`)
-        .uploadData(metaBuf, { metadata: { lastEdited: pageMeta.last_edited_time } });
+      // write metadata
+      const bodyBuf = Buffer.from(JSON.stringify({ lastEdited: pageMeta.last_edited_time }), 'utf8');
+      await rawContainer.getBlockBlobClient(`page-${pid}.json`)
+        .uploadData(bodyBuf, { metadata: { lastEdited: pageMeta.last_edited_time } });
     }
 
     context.log('🏁 ingest-notion complete');
-    context.res = { status: 200, body: 'Ingestion kicked off.' };
-  } catch (err) {
+    context.res = { status: 200, body: 'Ingestion complete.' };
+
+  } catch(err) {
     context.log.error('❌ ingest-notion failed:', err.message);
     context.log.error(err.stack);
     context.res = { status: 500, body: err.message };
