@@ -111,13 +111,12 @@ module.exports = async function (context, req) {
     // 2) Process each page incrementally
     for (const pid of toProcess) {
       context.log('Processing page', pid);
-      context.log('Fetching blocks for page', pid);
       const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
       const props      = await metaClient.getProperties().catch(() => undefined);
       const pageMeta   = await notion.pages.retrieve({ page_id: pid });
       const lastKey    = 'lastedited';
       if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) {
-        context.log('Skipping unchanged page; no blocks processed for page', pid);
+        context.log('Skipping unchanged page', pid);
         continue;
       }
 
@@ -143,7 +142,6 @@ module.exports = async function (context, req) {
       }
 
       const blocks = await fetchBlocks(pid);
-      context.log(`Fetched ${blocks.length} blocks for page ${pid}`);
       const records = [];
       const CHUNK   = 1000;
 
@@ -185,26 +183,24 @@ module.exports = async function (context, req) {
             }
           } else {
             context.log('RUNNING OTHER');
-            // Document Intelligence via REST SDK (using local file stream)
+            // Document Intelligence via REST SDK
             const contentType = getContentType(filename);
-            const fileStream = fsSync.createReadStream(tmpPath);
-            const initialResponse = await diClient
+            const analyzeResponse = await diClient
               .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
-              .post({ contentType, body: fileStream });
-            if (isUnexpected(initialResponse)) throw initialResponse.body.error;
-            const poller = getLongRunningPoller(diClient, initialResponse);
+              .post({ contentType: 'application/json', body: { urlSource: blk.url } });
+            if (isUnexpected(analyzeResponse)) throw analyzeResponse.body.error;
+            const poller = getLongRunningPoller(diClient, analyzeResponse);
             const diResult = (await poller.pollUntilDone()).body.analyzeResult;
             if (diResult.content) {
-              blockText += diResult.content + '
-';
+              blockText += diResult.content + '\n';
             } else if (diResult.pages) {
               for (const pg of diResult.pages) {
                 if (Array.isArray(pg.lines)) {
-                  for (const ln of pg.lines) blockText += ln.content + '
-';
+                  for (const ln of pg.lines) blockText += ln.content + '\n';
                 }
               }
             }
+          }
           await fs.unlink(tmpPath);
           // save extraction
           const blobName = blk.type==='image' ?
@@ -222,7 +218,6 @@ module.exports = async function (context, req) {
         }
       }
 
-      context.log(`Completed processing ${blocks.length} blocks for page ${pid}`);
       if (records.length) await pineIndex.upsert(records);
       // save metadata
       const md      = { [lastKey]: pageMeta.last_edited_time };
