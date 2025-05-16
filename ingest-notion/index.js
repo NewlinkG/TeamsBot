@@ -11,8 +11,6 @@ const { DocumentAnalysisClient, AzureKeyCredential } = require('@azure/ai-form-r
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
-const fsSync                        = require('fs');
-const { Readable }                  = require('stream');
 const fetch                         = require('node-fetch');
 
 module.exports = async function (context, req) {
@@ -112,6 +110,8 @@ module.exports = async function (context, req) {
             } else if (b.type === 'file') {
               acc.push({ type: 'file', url: b.file.file.url });
             }
+            context.log("Notion block type", b.type);
+
             if (b.has_children) await fetchBlocks(b.id, acc);
           }
           cursor = resp.has_more ? resp.next_cursor : undefined;
@@ -123,10 +123,8 @@ module.exports = async function (context, req) {
       let fullText = '';
 
       for (const blk of blocks) {
-        if (blk.type === 'text') {
-          fullText += blk.text + '\n';
-          continue;
-        }
+        context.log("Internal block type", blk.type);
+        if (blk.type === 'text') { fullText += blk.text + '\n'; context.log("RUNNING TEXT"); continue; }
 
         const fileUrl  = new URL(blk.url);
         const filename = path.basename(fileUrl.pathname);
@@ -137,18 +135,15 @@ module.exports = async function (context, req) {
         await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${filename}`).uploadFile(tmpPath);
 
         if (blk.type === 'image') {
-          // debug: ensure we're using a ReadableStream
-          const stream = fsSync.createReadStream(tmpPath);
-          context.log('DEBUG stream is readable:', stream.readable);
-          // send stream to OCR
-          const readRes = await cvClient.readInStream(stream);
-          const opLoc   = readRes._response.headers.get('operation-location');
-          const jobId   = opLoc.split('/').pop();
-          const ocrRes  = await cvClient.getReadResult(jobId);
+          context.log("RUNNING IMAGE")
+          // pass buffer directly for OCR
+          const readOp = await cvClient.readInStream(buf);
+          const ocrRes = await cvClient.getReadResult(readOp.jobId);
           for (const pr of ocrRes.analyzeResult.readResults || []) {
             for (const ln of pr.lines) fullText += ln.text + '\n';
           }
         } else {
+          context.log("RUNNING OTHER")
           // use file path so DI infers content type
           const poller = await frClient.beginAnalyzeDocument('prebuilt-read', tmpPath);
           const result = await poller.pollUntilDone();
@@ -180,10 +175,10 @@ module.exports = async function (context, req) {
     }
 
     context.log('🏁 ingest-notion complete');
-    context.res = { status:200, body:'Ingestion complete.' };
+    context.res = { status: 200, body: 'Ingestion complete.' };
   } catch(err) {
     context.log.error('❌ ingest-notion failed:', err.message);
     context.log.error(err.stack);
-    context.res = { status:500, body:err.message };
+    context.res = { status: 500, body: err.message };
   }
 };
