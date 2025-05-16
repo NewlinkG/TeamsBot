@@ -64,6 +64,9 @@ module.exports = async function (context, req) {
       new AzureKeyCredential(DI_KEY)
     );
 
+    // helper to sleep
+    const sleep = ms => new Promise(res => setTimeout(res, ms));
+
     // 1) Gather pages
     const seen = new Set();
     const toProcess = [];
@@ -126,8 +129,7 @@ module.exports = async function (context, req) {
         context.log("Internal block type", blk.type);
         if (blk.type === 'text') { fullText += blk.text + '\n'; context.log("RUNNING TEXT"); continue; }
 
-        const fileUrl  = new URL(blk.url);
-        const filename = path.basename(fileUrl.pathname);
+        const filename = path.basename(new URL(blk.url).pathname);
         const tmpPath  = path.join(os.tmpdir(), filename);
         const res      = await fetch(blk.url);
         const buf      = Buffer.from(await res.arrayBuffer());
@@ -136,28 +138,27 @@ module.exports = async function (context, req) {
 
         if (blk.type === 'image') {
           context.log("RUNNING IMAGE");
-          // Stream from the temp file; readInStream needs a function returning a Readable
-          const streamFn = () => fsSync.createReadStream(tmpPath);
-          const readResponse = await cvClient.readInStream(streamFn);
-          const operationLocation = readResponse.operationLocation;
-          const operationId = operationLocation.split('/').pop();
-          // Poll until completion, handling rate limits
+          const readResponse = await cvClient.readInStream(
+            () => fsSync.createReadStream(tmpPath)
+          );
+          const operationId = readResponse.operationLocation.split('/').pop();
           let ocrRes;
           while (true) {
             try {
               ocrRes = await cvClient.getReadResult(operationId);
             } catch (err) {
-              if (err instanceof RestError && err.response?.headers['retry-after']) {
-                const retry = parseInt(err.response.headers['retry-after'], 10) * 1000;
-                context.log.warn(`Rate limited, retrying GetReadResult after ${retry}ms`);
-                await new Promise(r => setTimeout(r, retry));
+              if (err instanceof RestError && err.response?.headers.get('retry-after')) {
+                const retrySec = parseInt(err.response.headers.get('retry-after'), 10);
+                const waitMs = (isNaN(retrySec) ? 3 : retrySec) * 1000;
+                context.log.warn(`Rate limited; retrying after ${waitMs}ms`);
+                await sleep(waitMs);
                 continue;
               }
               throw err;
             }
-            const status = ocrRes.status?.toLowerCase();
-            if (status === 'succeeded' || status === 'failed') break;
-            await new Promise(r => setTimeout(r, 2000));
+            const st = ocrRes.status?.toLowerCase();
+            if (st === 'succeeded' || st === 'failed') break;
+            await sleep(3000);
           }
           if (ocrRes.status?.toLowerCase() === 'succeeded') {
             for (const page of ocrRes.analyzeResult.readResults || []) {
@@ -180,8 +181,7 @@ module.exports = async function (context, req) {
       }
 
       // chunk & embed
-      const CHUNK   = 1000;
-      const records = [];
+      const CHUNK   = 1000; const records = [];
       for (let i = 0; i < fullText.length; i += CHUNK) {
         const slice = fullText.slice(i, i + CHUNK);
         const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
