@@ -189,7 +189,7 @@ module.exports = async function (context, req) {
               .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
               .post({ contentType: 'application/json', body: { urlSource: blk.url } });
             if (isUnexpected(analyzeResponse)) throw analyzeResponse.body.error;
-            const poller = await getLongRunningPoller(diClient, analyzeResponse);
+            const poller = getLongRunningPoller(diClient, analyzeResponse);
             const diResult = (await poller.pollUntilDone()).body.analyzeResult;
             if (diResult.content) {
               blockText += diResult.content + '\n';
