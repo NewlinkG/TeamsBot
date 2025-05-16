@@ -6,7 +6,9 @@ const { ComputerVisionClient }      = require('@azure/cognitiveservices-computer
 const { ApiKeyCredentials, RestError } = require('@azure/ms-rest-js');
 const { Pinecone }                  = require('@pinecone-database/pinecone');
 const { AzureOpenAI }               = require('openai');
-const { DocumentAnalysisClient, AzureKeyCredential } = require('@azure/ai-form-recognizer');
+const DocumentIntelligenceClient    = require('@azure-rest/ai-document-intelligence').default;
+const { getLongRunningPoller, isUnexpected } = require('@azure-rest/ai-document-intelligence');
+const { AzureKeyCredential }        = require('@azure/core-auth');
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
@@ -30,9 +32,9 @@ function getContentType(filename) {
 
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
-
   try {
     const E = key => { const v = process.env[key]; if (!v) throw new Error(`Missing env var: ${key}`); return v; };
+    // Environment
     const NOTION_TOKEN        = E('NOTION_TOKEN');
     const NOTION_SITE_ROOT    = E('NOTION_SITE_ROOT');
     const AZURE_STORAGE_CONN  = E('AZURE_STORAGE_CONNECTION_STRING');
@@ -72,10 +74,7 @@ module.exports = async function (context, req) {
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
 
-    const frClient = new DocumentAnalysisClient(
-      DI_ENDPOINT,
-      new AzureKeyCredential(DI_KEY)
-    );
+    const diClient = DocumentIntelligenceClient(DI_ENDPOINT, new AzureKeyCredential(DI_KEY));
 
     const sleep = ms => new Promise(res => setTimeout(res, ms));
 
@@ -121,7 +120,7 @@ module.exports = async function (context, req) {
         continue;
       }
 
-      // fetch blocks with IDs
+      // fetch blocks
       async function fetchBlocks(id, acc = []) {
         let cursor;
         do {
@@ -130,18 +129,10 @@ module.exports = async function (context, req) {
             context.log('Notion block type', b.type);
             const block = { id: b.id };
             if (['paragraph','heading_1','heading_2'].includes(b.type)) {
-              block.type = 'text';
-              block.text = b[b.type].rich_text.map(t => t.plain_text).join('');
-            } else if (b.type === 'image') {
-              block.type = 'image';
-              block.url = b.image.file.url;
-            } else if (b.type === 'file') {
-              block.type = 'file';
-              block.url = b.file.file.url;
-            } else {
-              if (b.has_children) await fetchBlocks(b.id, acc);
-              continue;
-            }
+              block.type = 'text'; block.text = b[b.type].rich_text.map(t => t.plain_text).join('');
+            } else if (b.type === 'image') { block.type = 'image'; block.url = b.image.file.url; }
+            else if (b.type === 'file')  { block.type = 'file';  block.url = b.file.file.url; }
+            else { if (b.has_children) await fetchBlocks(b.id, acc); continue; }
             acc.push(block);
             if (b.has_children) await fetchBlocks(b.id, acc);
           }
@@ -154,20 +145,17 @@ module.exports = async function (context, req) {
       const records = [];
       const CHUNK   = 1000;
 
-      // process each block individually
       for (const blk of blocks) {
         context.log('RUNNING', blk.type.toUpperCase(), 'for block', blk.id);
         const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
         let blockText = '';
 
         if (blk.type === 'text') {
-          context.log('RUNNING TEXT');
-          blockText = blk.text + '\n';
+          context.log('RUNNING TEXT'); blockText = blk.text + '\n';
         } else {
           context.log('RUNNING', blk.type.toUpperCase());
           const tmpPath = path.join(os.tmpdir(), filename);
-          const res     = await fetch(blk.url);
-          const buf     = Buffer.from(await res.arrayBuffer());
+          const buf     = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
           await fs.writeFile(tmpPath, buf);
           await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`).uploadFile(tmpPath);
 
@@ -180,73 +168,67 @@ module.exports = async function (context, req) {
               try { ocrRes = await cvClient.getReadResult(opId); }
               catch (err) {
                 if (err instanceof RestError && err.response.headers.get('retry-after')) {
-                  const wait = parseInt(err.response.headers.get('retry-after'),10)*1000 || 3000;
+                  const wait = parseInt(err.response.headers.get('retry-after'),10)*1000||3000;
                   context.log.warn(`Rate limited; retrying after ${wait}ms`);
-                  await sleep(wait);
-                  continue;
+                  await sleep(wait); continue;
                 }
                 throw err;
               }
-              const st = ocrRes.status.toLowerCase();
-              if (st === 'succeeded' || st === 'failed') break;
+              const st = ocrRes.status.toLowerCase(); if (st==='succeeded'||st==='failed') break;
               await sleep(3000);
             }
-            if (ocrRes.status.toLowerCase() === 'succeeded') {
-              for (const pg of ocrRes.analyzeResult.readResults || [])
-                for (const ln of pg.lines)
-                  blockText += ln.text + '\n';
+            if (ocrRes.status.toLowerCase()==='succeeded') {
+              for (const pg of ocrRes.analyzeResult.readResults||[])
+                for (const ln of pg.lines) blockText += ln.text + '\n';
             }
           } else {
             context.log('RUNNING OTHER');
-            const fileStream  = fsSync.createReadStream(tmpPath);
+            // Document Intelligence via REST SDK
             const contentType = getContentType(filename);
-            const poller      = await frClient.beginAnalyzeDocument('prebuilt-read', fileStream, { contentType });
-            const result = await poller.pollUntilDone();
-            // Use full content if available, fallback to page/line iteration
-            if (result.content) {
-              blockText += result.content + '
-            ';
-            } else if (result.pages) {
-              for (const pg of result.pages) {
+            const analyzeResponse = await diClient
+              .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
+              .post({ contentType: 'application/json', body: { urlSource: blk.url } });
+            if (isUnexpected(analyzeResponse)) throw analyzeResponse.body.error;
+            const poller = await getLongRunningPoller(diClient, analyzeResponse);
+            const diResult = (await poller.pollUntilDone()).body.analyzeResult;
+            if (diResult.content) {
+              blockText += diResult.content + '\n';
+            } else if (diResult.pages) {
+              for (const pg of diResult.pages) {
                 if (Array.isArray(pg.lines)) {
-                  for (const ln of pg.lines) {
-                    blockText += ln.content + '
-            ';
-                  }
+                  for (const ln of pg.lines) blockText += ln.content + '\n';
                 }
               }
             }
-            // save extraction output
-            await extractedContainer.getBlockBlobClient(blobName)
-              .upload(blockText, blockText.length);
-            await fs.unlink(tmpPath);
           }
+          await fs.unlink(tmpPath);
+          // save extraction
+          const blobName = blk.type==='image' ?
+            `ocr-${pid}-${blk.id}-${filename}.txt` :
+            `txt-${pid}-${blk.id}-${filename}.txt`;
+          await extractedContainer.getBlockBlobClient(blobName)
+            .upload(blockText, blockText.length);
+        }
 
-        // chunk & embed per-block
-        for (let offset = 0; offset < blockText.length; offset += CHUNK) {
-          const slice = blockText.slice(offset, offset + CHUNK);
+        // embeddings
+        for (let offset=0; offset<blockText.length; offset+=CHUNK) {
+          const slice = blockText.slice(offset, offset+CHUNK);
           const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
-          records.push({
-            id: `${pid}-${blk.id}-${offset}`,
-            values: emb.data[0].embedding,
-            metadata: { pageId: pid, blockId: blk.id }
-          });
+          records.push({ id:`${pid}-${blk.id}-${offset}`, values: emb.data[0].embedding, metadata:{ pageId: pid, blockId: blk.id }});
         }
       }
 
-      // upsert all records for this page
       if (records.length) await pineIndex.upsert(records);
-
-      // save page metadata
+      // save metadata
       const md      = { [lastKey]: pageMeta.last_edited_time };
-      const metaBuf = Buffer.from(JSON.stringify(md), 'utf8');
+      const metaBuf = Buffer.from(JSON.stringify(md),'utf8');
       await rawContainer.getBlockBlobClient(`page-${pid}.json`)
-        .uploadData(metaBuf, { metadata: md });
+        .uploadData(metaBuf,{ metadata: md });
     }
 
     context.log('🏁 ingest-notion complete');
     context.res = { status: 200, body: 'Ingestion complete.' };
-  } catch (err) {
+  } catch(err) {
     context.log.error('❌ ingest-notion failed:', err.message);
     context.log.error(err.stack);
     context.res = { status: 500, body: err.message };
