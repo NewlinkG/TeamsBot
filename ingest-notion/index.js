@@ -201,20 +201,26 @@ module.exports = async function (context, req) {
             const fileStream  = fsSync.createReadStream(tmpPath);
             const contentType = getContentType(filename);
             const poller      = await frClient.beginAnalyzeDocument('prebuilt-read', fileStream, { contentType });
-            const result      = await poller.pollUntilDone();
-            for (const pg of result.pages || [])
-              for (const ln of pg.lines)
-                blockText += ln.content + '\n';
+            const result = await poller.pollUntilDone();
+            // Use full content if available, fallback to page/line iteration
+            if (result.content) {
+              blockText += result.content + '
+            ';
+            } else if (result.pages) {
+              for (const pg of result.pages) {
+                if (Array.isArray(pg.lines)) {
+                  for (const ln of pg.lines) {
+                    blockText += ln.content + '
+            ';
+                  }
+                }
+              }
+            }
+            // save extraction output
+            await extractedContainer.getBlockBlobClient(blobName)
+              .upload(blockText, blockText.length);
+            await fs.unlink(tmpPath);
           }
-
-          // save extraction output
-          const blobName = blk.type === 'image'
-            ? `ocr-${pid}-${blk.id}-${filename}.txt`
-            : `txt-${pid}-${blk.id}-${filename}.txt`;
-          await extractedContainer.getBlockBlobClient(blobName)
-            .upload(blockText, blockText.length);
-          await fs.unlink(tmpPath);
-        }
 
         // chunk & embed per-block
         for (let offset = 0; offset < blockText.length; offset += CHUNK) {
