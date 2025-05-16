@@ -3,7 +3,7 @@ console.log('🔧 ingest-notion module loaded');
 const { Client: NotionClient }      = require('@notionhq/client');
 const { BlobServiceClient }         = require('@azure/storage-blob');
 const { ComputerVisionClient }      = require('@azure/cognitiveservices-computervision');
-const { ApiKeyCredentials }         = require('@azure/ms-rest-js');
+const { ApiKeyCredentials, RestError } = require('@azure/ms-rest-js');
 const { Pinecone }                  = require('@pinecone-database/pinecone');
 const { AzureOpenAI }               = require('openai');
 const { DocumentAnalysisClient, AzureKeyCredential } = require('@azure/ai-form-recognizer');
@@ -137,23 +137,32 @@ module.exports = async function (context, req) {
         if (blk.type === 'image') {
           context.log("RUNNING IMAGE");
           // Stream from the temp file; readInStream needs a function returning a Readable
-          const readResponse = await cvClient.readInStream(
-            () => fsSync.createReadStream(tmpPath)
-          );
-          // SDK exposes operationLocation directly
+          const streamFn = () => fsSync.createReadStream(tmpPath);
+          const readResponse = await cvClient.readInStream(streamFn);
           const operationLocation = readResponse.operationLocation;
           const operationId = operationLocation.split('/').pop();
-          // Poll until completion
+          // Poll until completion, handling rate limits
           let ocrRes;
-          do {
-            ocrRes = await cvClient.getReadResult(operationId);
-            await new Promise(r => setTimeout(r, 1000));
-          } while (
-            ocrRes.status?.toLowerCase() === 'running' ||
-            ocrRes.status?.toLowerCase() === 'notstarted'
-          );
-          for (const page of ocrRes.analyzeResult.readResults || []) {
-            for (const line of page.lines) fullText += line.text + '\n';
+          while (true) {
+            try {
+              ocrRes = await cvClient.getReadResult(operationId);
+            } catch (err) {
+              if (err instanceof RestError && err.response?.headers['retry-after']) {
+                const retry = parseInt(err.response.headers['retry-after'], 10) * 1000;
+                context.log.warn(`Rate limited, retrying GetReadResult after ${retry}ms`);
+                await new Promise(r => setTimeout(r, retry));
+                continue;
+              }
+              throw err;
+            }
+            const status = ocrRes.status?.toLowerCase();
+            if (status === 'succeeded' || status === 'failed') break;
+            await new Promise(r => setTimeout(r, 2000));
+          }
+          if (ocrRes.status?.toLowerCase() === 'succeeded') {
+            for (const page of ocrRes.analyzeResult.readResults || []) {
+              for (const line of page.lines) fullText += line.text + '\n';
+            }
           }
         } else {
           context.log("RUNNING OTHER");
