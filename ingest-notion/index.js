@@ -12,6 +12,7 @@ const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
 const fsSync                        = require('fs');
+const { Readable }                  = require('stream');
 const fetch                         = require('node-fetch');
 
 module.exports = async function (context, req) {
@@ -65,11 +66,13 @@ module.exports = async function (context, req) {
       new AzureKeyCredential(DI_KEY)
     );
 
-    // Gather pages
+    // 1) Gather pages
     const seen = new Set();
     const toProcess = [];
     async function walk(id) {
-      if (seen.has(id)) return; seen.add(id); toProcess.push(id);
+      if (seen.has(id)) return;
+      seen.add(id);
+      toProcess.push(id);
       let cursor;
       do {
         const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
@@ -89,20 +92,21 @@ module.exports = async function (context, req) {
     }
     await walk(NOTION_SITE_ROOT);
 
-    // Process pages
+    // 2) Process each page
     for (const pid of toProcess) {
       const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
       const props      = await metaClient.getProperties().catch(() => undefined);
       const pageMeta   = await notion.pages.retrieve({ page_id: pid });
       if (props?.metadata?.lastEdited === pageMeta.last_edited_time) continue;
 
+      // fetch blocks
       async function fetchBlocks(id, acc = []) {
         let cursor;
         do {
           const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
           for (const b of resp.results) {
             if (['paragraph','heading_1','heading_2'].includes(b.type)) {
-              acc.push({ type: 'text', text: b[b.type].rich_text.map(t=>t.plain_text).join('') });
+              acc.push({ type: 'text', text: b[b.type].rich_text.map(t => t.plain_text).join('') });
             } else if (b.type === 'image') {
               acc.push({ type: 'image', url: b.image.file.url });
             } else if (b.type === 'file') {
@@ -119,7 +123,10 @@ module.exports = async function (context, req) {
       let fullText = '';
 
       for (const blk of blocks) {
-        if (blk.type === 'text') { fullText += blk.text + '\n'; continue; }
+        if (blk.type === 'text') {
+          fullText += blk.text + '\n';
+          continue;
+        }
 
         const fileUrl  = new URL(blk.url);
         const filename = path.basename(fileUrl.pathname);
@@ -130,39 +137,46 @@ module.exports = async function (context, req) {
         await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${filename}`).uploadFile(tmpPath);
 
         if (blk.type === 'image') {
-          const stream  = fsSync.createReadStream(tmpPath);
+          // debug: ensure we're using a ReadableStream
+          const stream = fsSync.createReadStream(tmpPath);
+          context.log('DEBUG stream is readable:', stream.readable);
+          // send stream to OCR
           const readRes = await cvClient.readInStream(stream);
           const opLoc   = readRes._response.headers.get('operation-location');
-          const jobId   = opLoc.substring(opLoc.lastIndexOf('/')+1);
+          const jobId   = opLoc.split('/').pop();
           const ocrRes  = await cvClient.getReadResult(jobId);
           for (const pr of ocrRes.analyzeResult.readResults || []) {
             for (const ln of pr.lines) fullText += ln.text + '\n';
           }
         } else {
+          // use file path so DI infers content type
           const poller = await frClient.beginAnalyzeDocument('prebuilt-read', tmpPath);
           const result = await poller.pollUntilDone();
           let fileText = '';
           for (const pg of result.pages || []) {
             for (const ln of pg.lines) fileText += ln.content + '\n';
           }
-          await extractedContainer.getBlockBlobClient(`txt-${pid}-${filename}.txt`).upload(fileText, fileText.length);
+          await extractedContainer.getBlockBlobClient(`txt-${pid}-${filename}.txt`)
+            .upload(fileText, fileText.length);
           fullText += fileText + '\n';
         }
         await fs.unlink(tmpPath);
       }
 
+      // chunk & embed
       const CHUNK   = 1000;
       const records = [];
       for (let i = 0; i < fullText.length; i += CHUNK) {
-        const slice = fullText.slice(i, i+CHUNK);
+        const slice = fullText.slice(i, i + CHUNK);
         const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
         records.push({ id: `${pid}-${i}`, values: emb.data[0].embedding, metadata: { pageId: pid } });
       }
       if (records.length) await pineIndex.upsert(records);
 
+      // save metadata
       const metaBuf = Buffer.from(JSON.stringify({ lastEdited: pageMeta.last_edited_time }), 'utf8');
       await rawContainer.getBlockBlobClient(`page-${pid}.json`)
-         .uploadData(metaBuf, { metadata: { lastEdited: pageMeta.last_edited_time } });
+        .uploadData(metaBuf, { metadata: { lastEdited: pageMeta.last_edited_time } });
     }
 
     context.log('🏁 ingest-notion complete');
