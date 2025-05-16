@@ -14,6 +14,7 @@ const os                            = require('os');
 const fs                            = require('fs/promises');
 const fsSync                        = require('fs');
 const fetch                         = require('node-fetch');
+const { createHash }                = require('crypto');
 
 // helper to detect content type for Document Analysis (non-image formats)
 function getContentType(filename) {
@@ -34,7 +35,8 @@ module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
   try {
     const E = key => { const v = process.env[key]; if (!v) throw new Error(`Missing env var: ${key}`); return v; };
-    // Environment
+
+    // Environment variables
     const NOTION_TOKEN        = E('NOTION_TOKEN');
     const NOTION_SITE_ROOT    = E('NOTION_SITE_ROOT');
     const AZURE_STORAGE_CONN  = E('AZURE_STORAGE_CONNECTION_STRING');
@@ -63,12 +65,11 @@ module.exports = async function (context, req) {
       new ApiKeyCredentials({ inHeader: { 'Ocp-Apim-Subscription-Key': CV_KEY }}),
       CV_ENDPOINT,
       {
-        // Retry up to 5 times, exponential back-off between 200ms and 5s
         retryOptions: {
           maxRetries: 5,
-          retryDelayInMs: 500,
+          retryDelayInMs: 2000,
           maxRetryDelayInMs: 5000,
-          mode: "exponential"
+          mode: 'exponential'
         }
       }
     );
@@ -88,26 +89,22 @@ module.exports = async function (context, req) {
     const sleep = ms => new Promise(res => setTimeout(res, ms));
 
     // 1) Gather pages
-    const seen = new Set();
+    const seenPages = new Set();
     const toProcess = [];
     async function walk(id) {
-      if (seen.has(id)) return;
-      seen.add(id);
+      if (seenPages.has(id)) return;
+      seenPages.add(id);
       toProcess.push(id);
       let cursor;
       do {
         const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
         for (const b of resp.results) {
-          context.log('Notion block type', b.type);
           if (b.type === 'child_page') await walk(b.id);
           else if (b.type === 'child_database') {
             let dbCur;
             do {
               const qr = await notion.databases.query({ database_id: b.id, start_cursor: dbCur, page_size: 100 });
-              for (const e of qr.results) {
-                context.log('Notion block type', e.id);
-                await walk(e.id);
-              }
+              for (const e of qr.results) await walk(e.id);
               dbCur = qr.has_more ? qr.next_cursor : undefined;
             } while (dbCur);
           }
@@ -120,115 +117,127 @@ module.exports = async function (context, req) {
     // 2) Process each page incrementally
     for (const pid of toProcess) {
       context.log('Processing page', pid);
-      const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
-      const props      = await metaClient.getProperties().catch(() => undefined);
-      const pageMeta   = await notion.pages.retrieve({ page_id: pid });
-      const lastKey    = 'lastedited';
-      if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) {
+      const pageMetaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
+      const pageProps      = await pageMetaClient.getProperties().catch(() => undefined);
+      const pageMeta       = await notion.pages.retrieve({ page_id: pid });
+      const lastKey        = 'lastedited';
+      if (pageProps?.metadata?.[lastKey] === pageMeta.last_edited_time) {
         context.log('Skipping unchanged page', pid);
         continue;
       }
 
-      // fetch blocks
+      // fetch blocks for this page
       async function fetchBlocks(id, acc = []) {
         let cursor;
         do {
           const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
-          for (const b of resp.results) {
-            context.log('Notion block type', b.type);
-            const block = { id: b.id };
-            if (['paragraph','heading_1','heading_2'].includes(b.type)) {
-              block.type = 'text'; block.text = b[b.type].rich_text.map(t => t.plain_text).join('');
-            } else if (b.type === 'image') { block.type = 'image'; block.url = b.image.file.url; }
-            else if (b.type === 'file')  { block.type = 'file';  block.url = b.file.file.url; }
-            else { if (b.has_children) await fetchBlocks(b.id, acc); continue; }
-            acc.push(block);
-            if (b.has_children) await fetchBlocks(b.id, acc);
-          }
+          for (const b of resp.results) acc.push({ id: b.id, type: b.type, text: b[b.type]?.text?.map(t => t.plain_text).join('') || undefined, url: b[b.type]?.file?.url });
           cursor = resp.has_more ? resp.next_cursor : undefined;
         } while (cursor);
         return acc;
       }
-
       const blocks = await fetchBlocks(pid);
+
       const records = [];
       const CHUNK   = 1000;
 
+      // process each block
       for (const blk of blocks) {
         context.log('RUNNING', blk.type.toUpperCase(), 'for block', blk.id);
         const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
         let blockText = '';
 
+        // TEXT blocks: upload to extracted container with hash metadata
         if (blk.type === 'text') {
-          context.log('RUNNING TEXT'); blockText = blk.text + '\n';
-        } else {
-          context.log('RUNNING', blk.type.toUpperCase());
-          const tmpPath = path.join(os.tmpdir(), filename);
-          const buf     = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
-          await fs.writeFile(tmpPath, buf);
-          await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`).uploadFile(tmpPath);
-
-          if (blk.type === 'image') {
-            context.log('RUNNING IMAGE');
-            const readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath));
-            const opId     = readResp.operationLocation.split('/').pop();
-            let ocrRes;
-            while (true) {
-              try { ocrRes = await cvClient.getReadResult(opId); }
-              catch (err) {
-                if (err instanceof RestError && err.response.headers.get('retry-after')) {
-                  const wait = parseInt(err.response.headers.get('retry-after'),10)*1000||3000;
-                  context.log.warn(`Rate limited; retrying after ${wait}ms`);
-                  await sleep(wait); continue;
-                }
-                throw err;
-              }
-              const st = ocrRes.status.toLowerCase(); if (st==='succeeded'||st==='failed') break;
-              await sleep(3000);
-            }
-            if (ocrRes.status.toLowerCase()==='succeeded') {
-              for (const pg of ocrRes.analyzeResult.readResults||[])
-                for (const ln of pg.lines) blockText += ln.text + '\n';
-            }
-          } else {
-            context.log('RUNNING OTHER');
-            // Document Intelligence via REST SDK
-            const contentType = getContentType(filename);
-            const analyzeResponse = await diClient
-              .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
-              .post({ contentType: 'application/json', body: { urlSource: blk.url } });
-            if (isUnexpected(analyzeResponse)) throw analyzeResponse.body.error;
-            const poller = getLongRunningPoller(diClient, analyzeResponse);
-            const diResult = (await poller.pollUntilDone()).body.analyzeResult;
-            if (diResult.content) {
-              blockText += diResult.content + '\n';
-            } else if (diResult.pages) {
-              for (const pg of diResult.pages) {
-                if (Array.isArray(pg.lines)) {
-                  for (const ln of pg.lines) blockText += ln.content + '\n';
-                }
-              }
-            }
+          const textHash = createHash('sha256').update(blk.text || '', 'utf8').digest('hex');
+          const blobName = `${pid}-${blk.id}.txt`;
+          const extractedBlobClient = extractedContainer.getBlockBlobClient(blobName);
+          let existingProps;
+          try { existingProps = await extractedBlobClient.getProperties(); } catch (e) {
+            if (e.statusCode === 404) existingProps = undefined;
+            else throw e;
           }
-          await fs.unlink(tmpPath);
-          // save extraction
-          const blobName = blk.type==='image' ?
-            `ocr-${pid}-${blk.id}-${filename}.txt` :
-            `txt-${pid}-${blk.id}-${filename}.txt`;
-          await extractedContainer.getBlockBlobClient(blobName)
-            .upload(blockText, blockText.length);
+          if (existingProps?.metadata?.contentHash === textHash) {
+            context.log(`Skipping unchanged text block ${blk.id}`);
+            continue;
+          }
+          context.log(`Uploading text block ${blk.id} → ${blobName}`);
+          await extractedBlobClient.uploadData(Buffer.from(blk.text || '', 'utf8'), {
+            metadata: { contentHash: textHash },
+            blobHTTPHeaders: { blobContentType: 'text/plain' }
+          });
+          blockText = (blk.text || '') + '\n';
+
+        // IMAGE blocks: upload raw and OCR if changed
+        } else if (blk.type === 'image') {
+          context.log('RUNNING IMAGE for block', blk.id);
+          const tmpPath = path.join(os.tmpdir(), filename);
+          const buf = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
+          await fs.writeFile(tmpPath, buf);
+
+          const rawHash = createHash('sha256').update(buf).digest('hex');
+          const rawBlobName = `${pid}-${blk.id}-${filename}`;
+          const rawBlobClient = rawContainer.getBlockBlobClient(rawBlobName);
+          let existingProps;
+          try { existingProps = await rawBlobClient.getProperties(); } catch (e) {
+            if (e.statusCode === 404) existingProps = undefined;
+            else throw e;
+          }
+          if (existingProps?.metadata?.contentHash === rawHash) {
+            context.log(`Skipping unchanged image block ${blk.id}`);
+            continue;
+          }
+          context.log(`Uploading image block ${blk.id} → ${rawBlobName}`);
+          await rawBlobClient.uploadFile(tmpPath, { metadata: { contentHash: rawHash } });
+
+          // OCR
+          const readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath));
+          let ocrRes;
+          while (true) {
+            ocrRes = await cvClient.getReadResult(readResp.operationLocation);
+            const status = ocrRes.status.toLowerCase();
+            if (status === 'succeeded' || status === 'failed') break;
+            await sleep(3000);
+          }
+          if (ocrRes.status.toLowerCase() === 'succeeded') {
+            for (const pg of ocrRes.analyzeResult.readResults || [])
+              for (const ln of pg.lines)
+                blockText += ln.text + '\n';
+          }
+
+        // Other blocks: Document Intelligence
+        } else {
+          context.log('RUNNING OTHER for block', blk.id);
+          const contentType = getContentType(filename);
+          const analyzeResponse = await diClient
+            .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
+            .post({ contentType: 'application/json', body: { urlSource: blk.url } });
+          if (isUnexpected(analyzeResponse)) throw analyzeResponse.body.error;
+          const poller = getLongRunningPoller(diClient, analyzeResponse);
+          const diRes = await poller.pollUntilDone();
+          for (const page of diRes.analyzeResult.pages || [])
+            for (const line of page.lines)
+              blockText += line.content + '\n';
         }
 
-        // embeddings
-        for (let offset=0; offset<blockText.length; offset+=CHUNK) {
-          const slice = blockText.slice(offset, offset+CHUNK);
-          const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
-          records.push({ id:`${pid}-${blk.id}-${offset}`, values: emb.data[0].embedding, metadata:{ pageId: pid, blockId: blk.id }});
+        // Chunk and embed text if present
+        if (blockText) {
+          for (let offset = 0; offset < blockText.length; offset += CHUNK) {
+            const chunkText = blockText.slice(offset, offset + CHUNK);
+            const embedding = await openai.embeddings.create({ input: chunkText });
+            records.push({
+              id: `${pid}-${blk.id}-${offset}`,
+              values: embedding.data[0].embedding,
+              metadata: { pageId: pid, blockId: blk.id }
+            });
+          }
         }
       }
 
-      if (records.length) await pineIndex.upsert(records);
-      // save metadata
+      // Upsert embeddings if any
+      if (records.length) await pineIndex.upsert({ vectors: records });
+
+      // Save page metadata
       const md      = { [lastKey]: pageMeta.last_edited_time };
       const metaBuf = Buffer.from(JSON.stringify(md),'utf8');
       await rawContainer.getBlockBlobClient(`page-${pid}.json`)
