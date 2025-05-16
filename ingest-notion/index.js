@@ -214,7 +214,7 @@ const EXTRACTED_CONTAINER = process.env.BLOB_EXTRACTED_NAME;     if (!EXTRACTED_
               }
             }
           }
-          await fs.unlink(tmpPath);
+          await fs.unlink(tmpPath);(tmpPath);
           // save extraction
           const blobName = blk.type==='image' ?
             `ocr-${pid}-${blk.id}-${filename}.txt` :
