@@ -10,8 +10,8 @@ const { DocumentAnalysisClient, AzureKeyCredential } = require('@azure/ai-form-r
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
+const fsSync                        = require('fs');
 const fetch                         = require('node-fetch');
-const { Readable }                  = require('stream');
 
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
@@ -136,14 +136,14 @@ module.exports = async function (context, req) {
 
         if (blk.type === 'image') {
           context.log("RUNNING IMAGE");
-          // 1) Stream the temp file, not the Buffer:
-          const streamFn = () => fsSync.createReadStream(tmpPath);
-          // 2) Call readInStream without raw:true:
-          const readResponse = await cvClient.readInStream(streamFn);
-          // 3) Grab the operationLocation from the response object:
+          // Stream from the temp file; readInStream needs a function returning a Readable
+          const readResponse = await cvClient.readInStream(
+            () => fsSync.createReadStream(tmpPath)
+          );
+          // SDK exposes operationLocation directly
           const operationLocation = readResponse.operationLocation;
           const operationId = operationLocation.split('/').pop();
-          // 4) Poll until done:
+          // Poll until completion
           let ocrRes;
           do {
             ocrRes = await cvClient.getReadResult(operationId);
@@ -152,15 +152,11 @@ module.exports = async function (context, req) {
             ocrRes.status?.toLowerCase() === 'running' ||
             ocrRes.status?.toLowerCase() === 'notstarted'
           );
-          // 5) Append text:
           for (const page of ocrRes.analyzeResult.readResults || []) {
-            for (const line of page.lines) {
-              fullText += line.text + '\n';
-            }
+            for (const line of page.lines) fullText += line.text + '\n';
           }
         } else {
           context.log("RUNNING OTHER");
-          // use file path so DI infers content type
           const poller = await frClient.beginAnalyzeDocument('prebuilt-read', tmpPath);
           const result = await poller.pollUntilDone();
           let fileText = '';
