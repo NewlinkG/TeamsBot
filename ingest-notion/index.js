@@ -136,19 +136,27 @@ module.exports = async function (context, req) {
 
         if (blk.type === 'image') {
           context.log("RUNNING IMAGE");
-          // pass buffer as a stream, request raw headers so we can get the Operation-Location
-          const stream = Readable.from(buf);
-          const readResponse = await cvClient.readInStream(stream, { raw: true });
-          const operationLocation = readResponse.headers['Operation-Location'];
+          // 1) Stream the temp file, not the Buffer:
+          const streamFn = () => fsSync.createReadStream(tmpPath);
+          // 2) Call readInStream without raw:true:
+          const readResponse = await cvClient.readInStream(streamFn);
+          // 3) Grab the operationLocation from the response object:
+          const operationLocation = readResponse.operationLocation;
           const operationId = operationLocation.split('/').pop();
-          // poll until the operation is done
+          // 4) Poll until done:
           let ocrRes;
           do {
             ocrRes = await cvClient.getReadResult(operationId);
             await new Promise(r => setTimeout(r, 1000));
-          } while (ocrRes.status?.toLowerCase() === 'running' || ocrRes.status?.toLowerCase() === 'notstarted');
-          for (const pr of ocrRes.analyzeResult.readResults || []) {
-            for (const ln of pr.lines) fullText += ln.text + '\n';
+          } while (
+            ocrRes.status?.toLowerCase() === 'running' ||
+            ocrRes.status?.toLowerCase() === 'notstarted'
+          );
+          // 5) Append text:
+          for (const page of ocrRes.analyzeResult.readResults || []) {
+            for (const line of page.lines) {
+              fullText += line.text + '\n';
+            }
           }
         } else {
           context.log("RUNNING OTHER");
