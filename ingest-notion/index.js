@@ -33,22 +33,23 @@ function getContentType(filename) {
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
   try {
-    // Environment variables
-const NOTION_TOKEN        = process.env.NOTION_TOKEN;        if (!NOTION_TOKEN) throw new Error('Missing env var: NOTION_TOKEN');
-const NOTION_SITE_ROOT    = process.env.NOTION_SITE_ROOT;    if (!NOTION_SITE_ROOT) throw new Error('Missing env var: NOTION_SITE_ROOT');
-const AZURE_STORAGE_CONN  = process.env.AZURE_STORAGE_CONNECTION_STRING; if (!AZURE_STORAGE_CONN) throw new Error('Missing env var: AZURE_STORAGE_CONNECTION_STRING');
-const CV_ENDPOINT         = process.env.COMPUTER_VISION_ENDPOINT; if (!CV_ENDPOINT) throw new Error('Missing env var: COMPUTER_VISION_ENDPOINT');
-const CV_KEY              = process.env.COMPUTER_VISION_KEY;     if (!CV_KEY) throw new Error('Missing env var: COMPUTER_VISION_KEY');
-const OPENAI_ENDPOINT     = process.env.AZURE_OPENAI_ENDPOINT;   if (!OPENAI_ENDPOINT) throw new Error('Missing env var: AZURE_OPENAI_ENDPOINT');
-const OPENAI_API_KEY      = process.env.AZURE_OPENAI_KEY;        if (!OPENAI_API_KEY) throw new Error('Missing env var: AZURE_OPENAI_KEY');
-const OPENAI_API_VERSION  = process.env.AZURE_OPENAI_API_VERSION; if (!OPENAI_API_VERSION) throw new Error('Missing env var: AZURE_OPENAI_API_VERSION');
-const OPENAI_EMBED_MODEL  = process.env.AZURE_EMBEDDING_DEPLOYMENT_ID; if (!OPENAI_EMBED_MODEL) throw new Error('Missing env var: AZURE_EMBEDDING_DEPLOYMENT_ID');
-const PINECONE_API_KEY    = process.env.PINECONE_API_KEY;       if (!PINECONE_API_KEY) throw new Error('Missing env var: PINECONE_API_KEY');
-const PINECONE_INDEX_NAME = process.env.PINECONE_INDEX_NAME;    if (!PINECONE_INDEX_NAME) throw new Error('Missing env var: PINECONE_INDEX_NAME');
-const DI_ENDPOINT         = process.env.DI_ENDPOINT;            if (!DI_ENDPOINT) throw new Error('Missing env var: DI_ENDPOINT');
-const DI_KEY              = process.env.DI_KEY;                 if (!DI_KEY) throw new Error('Missing env var: DI_KEY');
-const RAW_CONTAINER       = process.env.BLOB_RAW_NAME;           if (!RAW_CONTAINER) throw new Error('Missing env var: BLOB_RAW_NAME');
-const EXTRACTED_CONTAINER = process.env.BLOB_EXTRACTED_NAME;     if (!EXTRACTED_CONTAINER) throw new Error('Missing env var: BLOB_EXTRACTED_NAME');
+    const E = key => { const v = process.env[key]; if (!v) throw new Error(`Missing env var: ${key}`); return v; };
+    // Environment
+    const NOTION_TOKEN        = E('NOTION_TOKEN');
+    const NOTION_SITE_ROOT    = E('NOTION_SITE_ROOT');
+    const AZURE_STORAGE_CONN  = E('AZURE_STORAGE_CONNECTION_STRING');
+    const CV_ENDPOINT         = E('COMPUTER_VISION_ENDPOINT');
+    const CV_KEY              = E('COMPUTER_VISION_KEY');
+    const OPENAI_ENDPOINT     = E('AZURE_OPENAI_ENDPOINT');
+    const OPENAI_API_KEY      = E('AZURE_OPENAI_KEY');
+    const OPENAI_API_VERSION  = E('AZURE_OPENAI_API_VERSION');
+    const OPENAI_EMBED_MODEL  = E('AZURE_EMBEDDING_DEPLOYMENT_ID');
+    const PINECONE_API_KEY    = E('PINECONE_API_KEY');
+    const PINECONE_INDEX_NAME = E('PINECONE_INDEX_NAME');
+    const DI_ENDPOINT         = E('DI_ENDPOINT');
+    const DI_KEY              = E('DI_KEY');
+    const RAW_CONTAINER       = E('BLOB_RAW_NAME');
+    const EXTRACTED_CONTAINER = E('BLOB_EXTRACTED_NAME');
 
     // Clients
     const notion = new NotionClient({ auth: NOTION_TOKEN });
@@ -105,15 +106,7 @@ const EXTRACTED_CONTAINER = process.env.BLOB_EXTRACTED_NAME;     if (!EXTRACTED_
         cursor = resp.has_more ? resp.next_cursor : undefined;
       } while (cursor);
     }
-    // instead of just the site root, search all accessible pages
-    context.log('Searching all pages accessible to integration...');
-    const searchResp = await notion.search({ filter: { value: 'page', property: 'object' }, page_size: 100 });
-    context.log(`Found ${searchResp.results.length} pages via search`);
-    for (const r of searchResp.results) {
-      await walk(r.id);
-    }
-    // you now have a full list of pages in toProcess
-
+    await walk(NOTION_SITE_ROOT);
 
     // 2) Process each page incrementally
     for (const pid of toProcess) {
@@ -202,17 +195,17 @@ const EXTRACTED_CONTAINER = process.env.BLOB_EXTRACTED_NAME;     if (!EXTRACTED_
             const poller = getLongRunningPoller(diClient, initialResponse);
             const diResult = (await poller.pollUntilDone()).body.analyzeResult;
             if (diResult.content) {
-            blockText += diResult.content + '\n';
-          } else if (diResult.pages) {
-            for (const pg of diResult.pages) {
-              if (Array.isArray(pg.lines)) {
-                for (const ln of pg.lines) {
-                  blockText += ln.content + '\n';
+              blockText += diResult.content + '
+';
+            } else if (diResult.pages) {
+              for (const pg of diResult.pages) {
+                if (Array.isArray(pg.lines)) {
+                  for (const ln of pg.lines) blockText += ln.content + '
+';
                 }
               }
             }
-          }
-          await fs.unlink(tmpPath);(tmpPath);
+          await fs.unlink(tmpPath);
           // save extraction
           const blobName = blk.type==='image' ?
             `ocr-${pid}-${blk.id}-${filename}.txt` :
