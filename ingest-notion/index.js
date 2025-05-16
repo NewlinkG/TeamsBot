@@ -31,19 +31,20 @@ module.exports = async function (context, req) {
     const OPENAI_ENDPOINT     = E('AZURE_OPENAI_ENDPOINT');
     const OPENAI_API_KEY      = E('AZURE_OPENAI_KEY');
     const OPENAI_API_VERSION  = E('AZURE_OPENAI_API_VERSION');
-    const OPENAI_EMBED_MODEL  = E('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_ID');
+    const OPENAI_EMBED_MODEL  = E('AZURE_EMBEDDING_DEPLOYMENT_ID');
     const PINECONE_API_KEY    = E('PINECONE_API_KEY');
     const PINECONE_INDEX_NAME = E('PINECONE_INDEX_NAME');
     const DI_ENDPOINT         = E('DI_ENDPOINT');
     const DI_KEY              = E('DI_KEY');
-    const RAW_CONTAINER       = process.env.BLOB_CONTAINER_NAME || 'raw-files';
+    const RAW_CONTAINER       = E('BLOB_RAW_NAME');
+    const EXTRACTED_CONTAINER = E('BLOB_EXTRACTED_NAME');
 
     // Clients
     const notion = new NotionClient({ auth: NOTION_TOKEN });
     const blobSvc = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONN);
     const rawContainer = blobSvc.getContainerClient(RAW_CONTAINER);
     await rawContainer.createIfNotExists();
-    const extractedContainer = blobSvc.getContainerClient('extracted-text');
+    const extractedContainer = blobSvc.getContainerClient(EXTRACTED_CONTAINER);
     await extractedContainer.createIfNotExists();
 
     const cvClient = new ComputerVisionClient(
