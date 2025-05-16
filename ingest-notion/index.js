@@ -1,4 +1,3 @@
-// ingest-notion/index.js
 console.log('🔧 ingest-notion module loaded');
 
 const { Client: NotionClient }      = require('@notionhq/client');
@@ -12,6 +11,7 @@ const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
 const fetch                         = require('node-fetch');
+const { Readable }                  = require('stream');
 
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
@@ -135,15 +135,23 @@ module.exports = async function (context, req) {
         await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${filename}`).uploadFile(tmpPath);
 
         if (blk.type === 'image') {
-          context.log("RUNNING IMAGE")
-          // pass buffer directly for OCR
-          const readOp = await cvClient.readInStream(buf);
-          const ocrRes = await cvClient.getReadResult(readOp.jobId);
+          context.log("RUNNING IMAGE");
+          // pass buffer as a stream, request raw headers so we can get the Operation-Location
+          const stream = Readable.from(buf);
+          const readResponse = await cvClient.readInStream(stream, { raw: true });
+          const operationLocation = readResponse.headers['Operation-Location'];
+          const operationId = operationLocation.split('/').pop();
+          // poll until the operation is done
+          let ocrRes;
+          do {
+            ocrRes = await cvClient.getReadResult(operationId);
+            await new Promise(r => setTimeout(r, 1000));
+          } while (ocrRes.status?.toLowerCase() === 'running' || ocrRes.status?.toLowerCase() === 'notstarted');
           for (const pr of ocrRes.analyzeResult.readResults || []) {
             for (const ln of pr.lines) fullText += ln.text + '\n';
           }
         } else {
-          context.log("RUNNING OTHER")
+          context.log("RUNNING OTHER");
           // use file path so DI infers content type
           const poller = await frClient.beginAnalyzeDocument('prebuilt-read', tmpPath);
           const result = await poller.pollUntilDone();
