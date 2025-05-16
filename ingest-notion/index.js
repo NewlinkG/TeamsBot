@@ -202,14 +202,12 @@ const EXTRACTED_CONTAINER = process.env.BLOB_EXTRACTED_NAME;     if (!EXTRACTED_
             const poller = getLongRunningPoller(diClient, initialResponse);
             const diResult = (await poller.pollUntilDone()).body.analyzeResult;
             if (diResult.content) {
-            blockText += diResult.content + '
-';
+            blockText += diResult.content + '\n';
           } else if (diResult.pages) {
             for (const pg of diResult.pages) {
               if (Array.isArray(pg.lines)) {
                 for (const ln of pg.lines) {
-                  blockText += ln.content + '
-';
+                  blockText += ln.content + '\n';
                 }
               }
             }
