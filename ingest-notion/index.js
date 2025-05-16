@@ -14,6 +14,7 @@ const os                            = require('os');
 const fs                            = require('fs/promises');
 const fsSync                        = require('fs');
 const fetch                         = require('node-fetch');
+const crypto                        = require('crypto');
 
 // helper to detect content type for Document Analysis (non-image formats)
 function getContentType(filename) {
@@ -28,6 +29,11 @@ function getContentType(filename) {
     case '.pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
     default: return 'application/octet-stream';
   }
+}
+
+// Hash helper
+function hashText(text) {
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16); // 16 chars should suffice
 }
 
 module.exports = async function (context, req) {
@@ -160,8 +166,21 @@ module.exports = async function (context, req) {
         let blockText = '';
 
         if (blk.type === 'text') {
-          context.log('RUNNING TEXT'); blockText = blk.text + '\n';
-        } else {
+  context.log('RUNNING TEXT');
+  blockText = blk.text + '\n';
+
+  const hash = hashText(blockText);
+  const blobName = `txt-${pid}-${blk.id}-${hash}.txt`;
+  const client = extractedContainer.getBlockBlobClient(blobName);
+  const exists = await client.exists();
+  if (exists) {
+    context.log('Skipping unchanged text block', blk.id);
+    continue;
+  }
+
+  await client.upload(blockText, blockText.length);
+}
+ else {
           context.log('RUNNING', blk.type.toUpperCase());
           const tmpPath = path.join(os.tmpdir(), filename);
           const buf     = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
