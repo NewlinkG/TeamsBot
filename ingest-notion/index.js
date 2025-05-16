@@ -6,16 +6,16 @@ const { ComputerVisionClient }      = require('@azure/cognitiveservices-computer
 const { ApiKeyCredentials, RestError } = require('@azure/ms-rest-js');
 const { Pinecone }                  = require('@pinecone-database/pinecone');
 const { AzureOpenAI }               = require('openai');
-const DocumentIntelligenceClient    = require('@azure-rest/ai-document-intelligence').default;
+const DocumentIntelligenceClient = require('@azure-rest/ai-document-intelligence').default;
 const { getLongRunningPoller, isUnexpected } = require('@azure-rest/ai-document-intelligence');
-const { AzureKeyCredential }        = require('@azure/core-auth');
+const { AzureKeyCredential } = require('@azure/core-auth');
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
 const fsSync                        = require('fs');
 const fetch                         = require('node-fetch');
 
-// helper to detect content type for Document Analysis (non-image formats)
+// helper to detect content type for Document Analysis (only non-image formats)
 function getContentType(filename) {
   const ext = path.extname(filename).toLowerCase();
   switch (ext) {
@@ -32,24 +32,24 @@ function getContentType(filename) {
 
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
+
   try {
-    const E = key => { const v = process.env[key]; if (!v) throw new Error(`Missing env var: ${key}`); return v; };
-    // Environment
-    const NOTION_TOKEN        = E('NOTION_TOKEN');
-    const NOTION_SITE_ROOT    = E('NOTION_SITE_ROOT');
-    const AZURE_STORAGE_CONN  = E('AZURE_STORAGE_CONNECTION_STRING');
-    const CV_ENDPOINT         = E('COMPUTER_VISION_ENDPOINT');
-    const CV_KEY              = E('COMPUTER_VISION_KEY');
-    const OPENAI_ENDPOINT     = E('AZURE_OPENAI_ENDPOINT');
-    const OPENAI_API_KEY      = E('AZURE_OPENAI_KEY');
-    const OPENAI_API_VERSION  = E('AZURE_OPENAI_API_VERSION');
-    const OPENAI_EMBED_MODEL  = E('AZURE_EMBEDDING_DEPLOYMENT_ID');
-    const PINECONE_API_KEY    = E('PINECONE_API_KEY');
-    const PINECONE_INDEX_NAME = E('PINECONE_INDEX_NAME');
-    const DI_ENDPOINT         = E('DI_ENDPOINT');
-    const DI_KEY              = E('DI_KEY');
-    const RAW_CONTAINER       = E('BLOB_RAW_NAME');
-    const EXTRACTED_CONTAINER = E('BLOB_EXTRACTED_NAME');
+    // Load environment variables
+    const NOTION_TOKEN        = process.env.NOTION_TOKEN;        if (!NOTION_TOKEN) throw new Error('Missing env var: NOTION_TOKEN');
+    const NOTION_SITE_ROOT    = process.env.NOTION_SITE_ROOT;    if (!NOTION_SITE_ROOT) throw new Error('Missing env var: NOTION_SITE_ROOT');
+    const AZURE_STORAGE_CONN  = process.env.AZURE_STORAGE_CONNECTION_STRING; if (!AZURE_STORAGE_CONN) throw new Error('Missing env var: AZURE_STORAGE_CONNECTION_STRING');
+    const CV_ENDPOINT         = process.env.COMPUTER_VISION_ENDPOINT; if (!CV_ENDPOINT) throw new Error('Missing env var: COMPUTER_VISION_ENDPOINT');
+    const CV_KEY              = process.env.COMPUTER_VISION_KEY;     if (!CV_KEY) throw new Error('Missing env var: COMPUTER_VISION_KEY');
+    const OPENAI_ENDPOINT     = process.env.AZURE_OPENAI_ENDPOINT;   if (!OPENAI_ENDPOINT) throw new Error('Missing env var: AZURE_OPENAI_ENDPOINT');
+    const OPENAI_API_KEY      = process.env.AZURE_OPENAI_KEY;        if (!OPENAI_API_KEY) throw new Error('Missing env var: AZURE_OPENAI_KEY');
+    const OPENAI_API_VERSION  = process.env.AZURE_OPENAI_API_VERSION; if (!OPENAI_API_VERSION) throw new Error('Missing env var: AZURE_OPENAI_API_VERSION');
+    const OPENAI_EMBED_MODEL  = process.env.AZURE_EMBEDDING_DEPLOYMENT_ID; if (!OPENAI_EMBED_MODEL) throw new Error('Missing env var: AZURE_EMBEDDING_DEPLOYMENT_ID');
+    const PINECONE_API_KEY    = process.env.PINECONE_API_KEY;       if (!PINECONE_API_KEY) throw new Error('Missing env var: PINECONE_API_KEY');
+    const PINECONE_INDEX_NAME = process.env.PINECONE_INDEX_NAME;    if (!PINECONE_INDEX_NAME) throw new Error('Missing env var: PINECONE_INDEX_NAME');
+    const DI_ENDPOINT         = process.env.DI_ENDPOINT;            if (!DI_ENDPOINT) throw new Error('Missing env var: DI_ENDPOINT');
+    const DI_KEY              = process.env.DI_KEY;                 if (!DI_KEY) throw new Error('Missing env var: DI_KEY');
+    const RAW_CONTAINER       = process.env.BLOB_RAW_NAME;           if (!RAW_CONTAINER) throw new Error('Missing env var: BLOB_RAW_NAME');
+    const EXTRACTED_CONTAINER = process.env.BLOB_EXTRACTED_NAME;     if (!EXTRACTED_CONTAINER) throw new Error('Missing env var: BLOB_EXTRACTED_NAME');
 
     // Clients
     const notion = new NotionClient({ auth: NOTION_TOKEN });
@@ -64,19 +64,14 @@ module.exports = async function (context, req) {
       CV_ENDPOINT
     );
 
-    const openai = new AzureOpenAI({
-      endpoint:   OPENAI_ENDPOINT,
-      apiKey:     OPENAI_API_KEY,
-      apiVersion: OPENAI_API_VERSION,
-      deployment: OPENAI_EMBED_MODEL
-    });
-
+    const openai = new AzureOpenAI({ endpoint: OPENAI_ENDPOINT, apiKey: OPENAI_API_KEY, apiVersion: OPENAI_API_VERSION, deployment: OPENAI_EMBED_MODEL });
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
 
     const diClient = DocumentIntelligenceClient(DI_ENDPOINT, new AzureKeyCredential(DI_KEY));
 
     const sleep = ms => new Promise(res => setTimeout(res, ms));
+const IMAGE_THROTTLE_DELAY_MS = parseInt(process.env.IMAGE_THROTTLE_DELAY_MS, 10) || 3000;  // ms between image OCR calls
 
     // 1) Gather pages
     const seen = new Set();
@@ -108,19 +103,18 @@ module.exports = async function (context, req) {
     }
     await walk(NOTION_SITE_ROOT);
 
-    // 2) Process each page incrementally
+    // 2) Process pages incrementally
     for (const pid of toProcess) {
       context.log('Processing page', pid);
       const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
-      const props      = await metaClient.getProperties().catch(() => undefined);
-      const pageMeta   = await notion.pages.retrieve({ page_id: pid });
-      const lastKey    = 'lastedited';
+      const props = await metaClient.getProperties().catch(() => undefined);
+      const pageMeta = await notion.pages.retrieve({ page_id: pid });
+      const lastKey = 'lastedited';
       if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) {
-        context.log('Skipping unchanged page', pid);
+        context.log('Skipping unchanged page; no blocks processed for page', pid);
         continue;
       }
-
-      // fetch blocks
+      context.log('Fetching blocks for page', pid);
       async function fetchBlocks(id, acc = []) {
         let cursor;
         do {
@@ -140,10 +134,11 @@ module.exports = async function (context, req) {
         } while (cursor);
         return acc;
       }
-
       const blocks = await fetchBlocks(pid);
+      context.log(`Fetched ${blocks.length} blocks for page ${pid}`);
+
       const records = [];
-      const CHUNK   = 1000;
+      const CHUNK = 1000;
 
       for (const blk of blocks) {
         context.log('RUNNING', blk.type.toUpperCase(), 'for block', blk.id);
@@ -153,77 +148,83 @@ module.exports = async function (context, req) {
         if (blk.type === 'text') {
           context.log('RUNNING TEXT'); blockText = blk.text + '\n';
         } else {
-          context.log('RUNNING', blk.type.toUpperCase());
-          const tmpPath = path.join(os.tmpdir(), filename);
-          const buf     = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
-          await fs.writeFile(tmpPath, buf);
-          await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`).uploadFile(tmpPath);
+            context.log('RUNNING OTHER');
+            // Document Intelligence via REST SDK (using local file stream)
+            const contentType = getContentType(filename);
+            const fileStream = fsSync.createReadStream(tmpPath);
+            const initialResponse = await diClient
+              .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
+              .post({ contentType, body: fileStream });
+            if (isUnexpected(initialResponse)) throw initialResponse.body.error;
+            const poller = getLongRunningPoller(diClient, initialResponse);
+            const diResult = (await poller.pollUntilDone()).body.analyzeResult;
+            if (diResult.content) {
+              blockText += diResult.content + '
+';
+            } else if (Array.isArray(diResult.pages)) {
+              for (const pg of diResult.pages) {
+                if (Array.isArray(pg.lines)) {
+                  for (const ln of pg.lines) {
+                    blockText += ln.content + '
+';
+                  }
+                }
+              }
+            }
+            await fs.unlink(tmpPath);
+            // save extraction output
+            const blobName = `txt-${pid}-${blk.id}-${filename}.txt`;
+            await extractedContainer.getBlockBlobClient(blobName)
+              .upload(blockText, blockText.length);
+        }
+        }
 
-          if (blk.type === 'image') {
+        if (blk.type === 'image') {
             context.log('RUNNING IMAGE');
             const readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath));
-            const opId     = readResp.operationLocation.split('/').pop();
+            const opId = readResp.operationLocation.split('/').pop();
             let ocrRes;
             while (true) {
-              try { ocrRes = await cvClient.getReadResult(opId); }
-              catch (err) {
-                if (err instanceof RestError && err.response.headers.get('retry-after')) {
-                  const wait = parseInt(err.response.headers.get('retry-after'),10)*1000||3000;
-                  context.log.warn(`Rate limited; retrying after ${wait}ms`);
-                  await sleep(wait); continue;
+              try {
+                ocrRes = await cvClient.getReadResult(opId);
+              } catch (err) {
+                if (err instanceof RestError) {
+                  const retryHeader = err.response.headers.get('retry-after');
+                  if (retryHeader) {
+                    const retrySec = parseInt(retryHeader, 10) || 3;
+                    const waitMs = retrySec * 1000 + 500;
+                    context.log.warn(`Rate limited; retrying getReadResult after ${waitMs}ms`);
+                    await sleep(waitMs);
+                    continue;
+                  }
                 }
                 throw err;
               }
-              const st = ocrRes.status.toLowerCase(); if (st==='succeeded'||st==='failed') break;
+              const st = ocrRes.status.toLowerCase();
+              if (st === 'succeeded' || st === 'failed') break;
               await sleep(3000);
             }
-            if (ocrRes.status.toLowerCase()==='succeeded') {
-              for (const pg of ocrRes.analyzeResult.readResults||[])
-                for (const ln of pg.lines) blockText += ln.text + '\n';
-            }
-          } else {
-            context.log('RUNNING OTHER');
-            // Document Intelligence via REST SDK
-            const contentType = getContentType(filename);
-            const analyzeResponse = await diClient
-              .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
-              .post({ contentType: 'application/json', body: { urlSource: blk.url } });
-            if (isUnexpected(analyzeResponse)) throw analyzeResponse.body.error;
-            const poller = getLongRunningPoller(diClient, analyzeResponse);
-            const diResult = (await poller.pollUntilDone()).body.analyzeResult;
-            if (diResult.content) {
-              blockText += diResult.content + '\n';
-            } else if (diResult.pages) {
-              for (const pg of diResult.pages) {
-                if (Array.isArray(pg.lines)) {
-                  for (const ln of pg.lines) blockText += ln.content + '\n';
+            if (ocrRes.status.toLowerCase() === 'succeeded') {
+              for (const pg of ocrRes.analyzeResult.readResults || []) {
+                for (const ln of pg.lines) {
+                  blockText += ln.text + '
+';
                 }
               }
             }
-          }
-          await fs.unlink(tmpPath);
-          // save extraction
-          const blobName = blk.type==='image' ?
-            `ocr-${pid}-${blk.id}-${filename}.txt` :
-            `txt-${pid}-${blk.id}-${filename}.txt`;
-          await extractedContainer.getBlockBlobClient(blobName)
-            .upload(blockText, blockText.length);
-        }
-
-        // embeddings
-        for (let offset=0; offset<blockText.length; offset+=CHUNK) {
+          } else {=0; offset<blockText.length; offset+=CHUNK) {
           const slice = blockText.slice(offset, offset+CHUNK);
-          const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
-          records.push({ id:`${pid}-${blk.id}-${offset}`, values: emb.data[0].embedding, metadata:{ pageId: pid, blockId: blk.id }});
+          const emb = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
+          records.push({ id:`${pid}-${blk.id}-${offset}`, values:emb.data[0].embedding, metadata:{ pageId:pid, blockId:blk.id }});
         }
       }
 
+      context.log(`Completed processing ${blocks.length} blocks for page ${pid}`);
       if (records.length) await pineIndex.upsert(records);
-      // save metadata
-      const md      = { [lastKey]: pageMeta.last_edited_time };
+
+      const md = { [lastKey]: pageMeta.last_edited_time };
       const metaBuf = Buffer.from(JSON.stringify(md),'utf8');
-      await rawContainer.getBlockBlobClient(`page-${pid}.json`)
-        .uploadData(metaBuf,{ metadata: md });
+      await rawContainer.getBlockBlobClient(`page-${pid}.json`).uploadData(metaBuf, { metadata: md });
     }
 
     context.log('🏁 ingest-notion complete');
