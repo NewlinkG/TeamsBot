@@ -141,7 +141,18 @@ module.exports = async function (context, req) {
       context.log('Processing page', pid);
       const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
       const props      = await metaClient.getProperties().catch(() => undefined);
-      const pageMeta   = await notion.pages.retrieve({ page_id: pid });
+      let pageMeta;
+      try {
+        pageMeta = await notion.pages.retrieve({ page_id: pid });
+      } catch (err) {
+        if (err.code === 'object_not_found') {
+          context.log.warn(`⚠️ Skipping inaccessible page ${pid}`);
+          continue;
+        } else {
+          throw err;
+        }
+      }
+
       const lastKey    = 'lastedited';
       if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) {
         context.log('Skipping unchanged page', pid);
