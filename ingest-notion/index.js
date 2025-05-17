@@ -212,7 +212,23 @@ module.exports = async function (context, req) {
 
           if (blk.type === 'image') {
             context.log('RUNNING IMAGE');
-            const readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath));
+            let readResp;
+            for (let attempt = 0; attempt < 5; attempt++) {
+              try {
+                readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath));
+                break; // success
+              } catch (err) {
+                if (err instanceof RestError && err.message.includes('call rate limit')) {
+                  const wait = 3000 * (attempt + 1); // exponential-ish backoff
+                  context.log.warn(`📉 Computer Vision rate limited on initial call; retrying in ${wait}ms`);
+                  await sleep(wait);
+                } else {
+                  throw err;
+                }
+              }
+            }
+            if (!readResp) throw new Error('❌ Failed to initiate Computer Vision read after retries.');
+
             const opId     = readResp.operationLocation.split('/').pop();
             let ocrRes;
             while (true) {
