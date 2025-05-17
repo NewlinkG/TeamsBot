@@ -207,6 +207,12 @@ module.exports = async function (context, req) {
           context.log('RUNNING', blk.type.toUpperCase());
           const tmpPath = path.join(os.tmpdir(), filename);
           const buf     = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
+
+          if (buf.length > 4 * 1024 * 1024) {
+            context.log.warn(`📤 Treating oversized image as file (${(buf.length/1024/1024).toFixed(2)}MB): ${filename}`);
+            blk.type = 'file';
+          }
+
           await fs.writeFile(tmpPath, buf);
           await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`).uploadFile(tmpPath);
 
@@ -249,7 +255,7 @@ module.exports = async function (context, req) {
                 for (const ln of pg.lines) blockText += ln.text + '\n';
             }
           } else {
-            context.log('RUNNING OTHER');
+            context.log('RUNNING OTHER DOCUMENTS');
             // Document Intelligence via REST SDK
             const contentType = getContentType(filename);
             const analyzeResponse = await diClient
