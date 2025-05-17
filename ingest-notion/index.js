@@ -42,7 +42,6 @@ module.exports = async function (context, req) {
     const E = key => { const v = process.env[key]; if (!v) throw new Error(`Missing env var: ${key}`); return v; };
     // Environment
     const NOTION_TOKEN        = E('NOTION_TOKEN');
-    const NOTION_SITE_ROOT    = E('NOTION_SITE_ROOT');
     const AZURE_STORAGE_CONN  = E('AZURE_STORAGE_CONNECTION_STRING');
     const CV_ENDPOINT         = E('COMPUTER_VISION_ENDPOINT');
     const CV_KEY              = E('COMPUTER_VISION_KEY');
@@ -121,7 +120,21 @@ module.exports = async function (context, req) {
         cursor = resp.has_more ? resp.next_cursor : undefined;
       } while (cursor);
     }
-    await walk(NOTION_SITE_ROOT);
+
+    async function discoverAllAccessibleRoots() {
+      let cursor;
+      do {
+        const resp = await notion.search({ start_cursor: cursor, page_size: 100 });
+        for (const result of resp.results) {
+          if ((result.object === 'page' || result.object === 'database') && result.id) {
+            await walk(result.id);
+          }
+        }
+        cursor = resp.has_more ? resp.next_cursor : undefined;
+      } while (cursor);
+    }
+
+    await discoverAllAccessibleRoots();
 
     // 2) Process each page incrementally
     for (const pid of toProcess) {
@@ -166,21 +179,20 @@ module.exports = async function (context, req) {
         let blockText = '';
 
         if (blk.type === 'text') {
-  context.log('RUNNING TEXT');
-  blockText = blk.text + '\n';
+          context.log('RUNNING TEXT');
+          blockText = blk.text + '\n';
 
-  const hash = hashText(blockText);
-  const blobName = `txt-${pid}-${blk.id}-${hash}.txt`;
-  const client = extractedContainer.getBlockBlobClient(blobName);
-  const exists = await client.exists();
-  if (exists) {
-    context.log('Skipping unchanged text block', blk.id);
-    continue;
-  }
+          const hash = hashText(blockText);
+          const blobName = `txt-${pid}-${blk.id}-${hash}.txt`;
+          const client = extractedContainer.getBlockBlobClient(blobName);
+          const exists = await client.exists();
+          if (exists) {
+            context.log('Skipping unchanged text block', blk.id);
+            continue;
+          }
 
-  await client.upload(blockText, blockText.length);
-}
- else {
+          await client.upload(blockText, blockText.length);
+        } else {
           context.log('RUNNING', blk.type.toUpperCase());
           const tmpPath = path.join(os.tmpdir(), filename);
           const buf     = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
