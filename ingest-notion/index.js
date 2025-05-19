@@ -213,6 +213,30 @@ module.exports = async function (context, req) {
       }
 
       const blocks = await fetchBlocks(pid);
+      // 🆕 Process file properties from database entry (if any)
+      const propertyBlocks = [];
+      for (const [key, prop] of Object.entries(pageMeta.properties || {})) {
+        if (prop?.type === 'files' && Array.isArray(prop.files)) {
+          for (const f of prop.files) {
+            const url = f?.file?.url || f?.external?.url;
+            if (url) {
+              const ext = path.extname(f.name || '').toLowerCase();
+              const isImage = ['.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'].includes(ext);
+
+              propertyBlocks.push({
+                id: `${pid}-${key}`,
+                type: isImage ? 'image' : 'file',
+                notionType: 'property',
+                url,
+                fileName: f.name || ''
+              });
+            }
+          }
+        }
+      }
+      // Append to blocks array for unified processing
+      blocks.push(...propertyBlocks);
+
       const records = [];
       const CHUNK   = 1000;
 
