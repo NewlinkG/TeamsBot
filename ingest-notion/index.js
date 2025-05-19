@@ -267,7 +267,10 @@ module.exports = async function (context, req) {
             const analyzeResponse = await diClient
               .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
               .post({ contentType: 'application/json', body: { urlSource: blk.url } });
-            if (isUnexpected(analyzeResponse)) throw analyzeResponse.body.error;
+            if (isUnexpected(analyzeResponse)) {
+              context.log.error('📄 DI analyzeResponse:', JSON.stringify(analyzeResponse.body, null, 2));
+              throw new Error(analyzeResponse.body?.error?.message || 'Unexpected Document Intelligence error');
+            }
             const poller = getLongRunningPoller(diClient, analyzeResponse);
             const diResult = (await poller.pollUntilDone()).body.analyzeResult;
             if (diResult.content) {
