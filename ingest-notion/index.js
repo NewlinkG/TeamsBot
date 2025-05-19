@@ -350,8 +350,8 @@ module.exports = async function (context, req) {
                 blockId: blk.id,
                 notionType: blk.notionType,
                 blockType: blk.type,
-                fileName: filename || null,
-                originalUrl: blk.url || null,
+                fileName: filename || '',
+                originalUrl: blk.url || '',
                 sourceTitle: pageMeta?.properties?.title?.title?.[0]?.plain_text || '',
                 sourceUrl: `https://www.notion.so/${pid.replace(/-/g, '')}`
               }
@@ -360,7 +360,7 @@ module.exports = async function (context, req) {
         }
       }
 
-      if (records.length) await pineIndex.upsert(records);
+      if (records.length) await pineIndex.namespace('notion').upsert(records);
       // save metadata
       const md      = { [lastKey]: pageMeta.last_edited_time };
       const metaBuf = Buffer.from(JSON.stringify(md),'utf8');
