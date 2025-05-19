@@ -80,6 +80,7 @@ module.exports = async function (context, req) {
     // 1) Gather pages
     const seen = new Set();
     const toProcess = [];
+
     async function walk(id) {
       if (seen.has(id)) return;
       seen.add(id);
@@ -88,16 +89,12 @@ module.exports = async function (context, req) {
       do {
         const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
         for (const b of resp.results) {
-          // context.log('Notion block type', b.type);
           if (b.type === 'child_page') await walk(b.id);
           else if (b.type === 'child_database') {
             let dbCur;
             do {
               const qr = await notion.databases.query({ database_id: b.id, start_cursor: dbCur, page_size: 100 });
-              for (const e of qr.results) {
-                //context.log('Notion block type', e.id);
-                await walk(e.id);
-              }
+              for (const e of qr.results) await walk(e.id);
               dbCur = qr.has_more ? qr.next_cursor : undefined;
             } while (dbCur);
           }
@@ -121,49 +118,72 @@ module.exports = async function (context, req) {
 
     await discoverAllAccessibleRoots();
 
-    // 2) Process each page incrementally
-    for (const pid of toProcess) {
-      // context.log('Processing page', pid);
-      const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
-      const props      = await metaClient.getProperties().catch(() => undefined);
-      let pageMeta;
-      try {
-        pageMeta = await notion.pages.retrieve({ page_id: pid });
-      } catch (err) {
-        if (err.code === 'object_not_found') {
-          context.log.warn(`⚠️ Skipping inaccessible page ${pid}`);
-          continue;
-        } else {
-          throw err;
-        }
-      }
+    // fetch blocks
+    async function fetchBlocks(id, acc = []) {
+      let cursor;
+      do {
+        const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
+        for (const b of resp.results) {
+          context.log('Notion block type', b.type);
+          const block = { id: b.id, notionType: b.type };
 
-      const lastKey    = 'lastedited';
-      if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) {
-        context.log('Skipping unchanged page', pid);
-        continue;
-      }
-
-      // fetch blocks
-      async function fetchBlocks(id, acc = []) {
-        let cursor;
-        do {
-          const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
-          for (const b of resp.results) {
-            context.log('Notion block type', b.type);
-            const block = { id: b.id };
-            if (['paragraph','heading_1','heading_2'].includes(b.type)) {
-              block.type = 'text'; block.text = b[b.type].rich_text.map(t => t.plain_text).join('');
-            } else if (b.type === 'image') { block.type = 'image'; block.url = b.image.file.url; }
-            else if (b.type === 'file')  { block.type = 'file';  block.url = b.file.file.url; }
-            else { if (b.has_children) await fetchBlocks(b.id, acc); continue; }
+          // Text-like blocks
+          if (['paragraph','heading_1','heading_2','quote','callout','code','bulleted_list_item','numbered_list_item','to_do','toggle'].includes(b.type)) {
+            block.type = 'text';
+            block.text = b[b.type]?.rich_text?.map(t => t.plain_text).join('') || '';
             acc.push(block);
             if (b.has_children) await fetchBlocks(b.id, acc);
+            continue;
           }
-          cursor = resp.has_more ? resp.next_cursor : undefined;
-        } while (cursor);
-        return acc;
-      }
+
+          // Images and files
+          else if (b.type === 'image') {
+            const url = b.image?.file?.url || b.image?.external?.url;
+            if (url) {
+              block.type = 'image';
+              block.url = url;
+              acc.push(block);
+            }
+          }
+          else if (b.type === 'file' || b.type === 'pdf') {
+            const url = b.file?.file?.url || b.file?.external?.url;
+            if (url) {
+              block.type = 'file';
+              block.url = url;
+              acc.push(block);
+            }
+          }
+
+          // Embeds and videos
+          else if (['video', 'embed', 'bookmark', 'link_preview'].includes(b.type)) {
+            const url = b[b.type]?.url || b[b.type]?.external?.url;
+            if (url) {
+              block.type = 'media';
+              block.url = url;
+              acc.push(block);
+            }
+          }
+
+          // Layout wrappers — recurse only
+          else if (['synced_block', 'column', 'column_list'].includes(b.type)) {
+            if (b.has_children) await fetchBlocks(b.id, acc);
+            continue;
+          }
+
+          // Unknown — recurse if possible
+          else {
+            context.log.warn(`⚠️ Unrecognized block type: ${b.type}`);
+            if (b.has_children) await fetchBlocks(b.id, acc);
+            continue;
+          }
+        }
+
+        cursor = resp.has_more ? resp.next_cursor : undefined;
+      } while (cursor);
+
+      return acc;
+    }
+
 
       const blocks = await fetchBlocks(pid);
       const records = [];
