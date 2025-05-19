@@ -118,72 +118,94 @@ module.exports = async function (context, req) {
 
     await discoverAllAccessibleRoots();
 
-    // fetch blocks
-    async function fetchBlocks(id, acc = []) {
-      let cursor;
-      do {
-        const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
-        for (const b of resp.results) {
-          context.log('Notion block type', b.type);
-          const block = { id: b.id, notionType: b.type };
-
-          // Text-like blocks
-          if (['paragraph','heading_1','heading_2','quote','callout','code','bulleted_list_item','numbered_list_item','to_do','toggle'].includes(b.type)) {
-            block.type = 'text';
-            block.text = b[b.type]?.rich_text?.map(t => t.plain_text).join('') || '';
-            acc.push(block);
-            if (b.has_children) await fetchBlocks(b.id, acc);
-            continue;
-          }
-
-          // Images and files
-          else if (b.type === 'image') {
-            const url = b.image?.file?.url || b.image?.external?.url;
-            if (url) {
-              block.type = 'image';
-              block.url = url;
-              acc.push(block);
-            }
-          }
-          else if (b.type === 'file' || b.type === 'pdf') {
-            const url = b.file?.file?.url || b.file?.external?.url;
-            if (url) {
-              block.type = 'file';
-              block.url = url;
-              acc.push(block);
-            }
-          }
-
-          // Embeds and videos
-          else if (['video', 'embed', 'bookmark', 'link_preview'].includes(b.type)) {
-            const url = b[b.type]?.url || b[b.type]?.external?.url;
-            if (url) {
-              block.type = 'media';
-              block.url = url;
-              acc.push(block);
-            }
-          }
-
-          // Layout wrappers — recurse only
-          else if (['synced_block', 'column', 'column_list'].includes(b.type)) {
-            if (b.has_children) await fetchBlocks(b.id, acc);
-            continue;
-          }
-
-          // Unknown — recurse if possible
-          else {
-            context.log.warn(`⚠️ Unrecognized block type: ${b.type}`);
-            if (b.has_children) await fetchBlocks(b.id, acc);
-            continue;
-          }
+    // 2) Process each page incrementally
+    for (const pid of toProcess) {
+      // context.log('Processing page', pid);
+      const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
+      const props      = await metaClient.getProperties().catch(() => undefined);
+      let pageMeta;
+      try {
+        pageMeta = await notion.pages.retrieve({ page_id: pid });
+      } catch (err) {
+        if (err.code === 'object_not_found') {
+          context.log.warn(`⚠️ Skipping inaccessible page ${pid}`);
+          continue;
+        } else {
+          throw err;
         }
+      }
 
-        cursor = resp.has_more ? resp.next_cursor : undefined;
-      } while (cursor);
+      const lastKey    = 'lastedited';
+      if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) {
+        context.log('Skipping unchanged page', pid);
+        continue;
+      }
 
-      return acc;
-    }
+      // fetch blocks
+      async function fetchBlocks(id, acc = []) {
+        let cursor;
+        do {
+          const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
+          for (const b of resp.results) {
+            context.log('Notion block type', b.type);
+            const block = { id: b.id, notionType: b.type };
 
+            // Text-like blocks
+            if (['paragraph','heading_1','heading_2','quote','callout','code','bulleted_list_item','numbered_list_item','to_do','toggle'].includes(b.type)) {
+              block.type = 'text';
+              block.text = b[b.type]?.rich_text?.map(t => t.plain_text).join('') || '';
+              acc.push(block);
+              if (b.has_children) await fetchBlocks(b.id, acc);
+              continue;
+            }
+
+            // Images and files
+            else if (b.type === 'image') {
+              const url = b.image?.file?.url || b.image?.external?.url;
+              if (url) {
+                block.type = 'image';
+                block.url = url;
+                acc.push(block);
+              }
+            }
+            else if (b.type === 'file' || b.type === 'pdf') {
+              const url = b.file?.file?.url || b.file?.external?.url;
+              if (url) {
+                block.type = 'file';
+                block.url = url;
+                acc.push(block);
+              }
+            }
+
+            // Embeds and videos
+            else if (['video', 'embed', 'bookmark', 'link_preview'].includes(b.type)) {
+              const url = b[b.type]?.url || b[b.type]?.external?.url;
+              if (url) {
+                block.type = 'media';
+                block.url = url;
+                acc.push(block);
+              }
+            }
+
+            // Layout wrappers — recurse only
+            else if (['synced_block', 'column', 'column_list'].includes(b.type)) {
+              if (b.has_children) await fetchBlocks(b.id, acc);
+              continue;
+            }
+
+            // Unknown — recurse if possible
+            else {
+              context.log.warn(`⚠️ Unrecognized block type: ${b.type}`);
+              if (b.has_children) await fetchBlocks(b.id, acc);
+              continue;
+            }
+          }
+
+          cursor = resp.has_more ? resp.next_cursor : undefined;
+        } while (cursor);
+
+        return acc;
+      }
 
       const blocks = await fetchBlocks(pid);
       const records = [];
@@ -308,11 +330,33 @@ module.exports = async function (context, req) {
             .upload(blockText, blockText.length);
         }
 
-        // embeddings
-        for (let offset=0; offset<blockText.length; offset+=CHUNK) {
-          const slice = blockText.slice(offset, offset+CHUNK);
-          const emb   = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
-          records.push({ id:`${pid}-${blk.id}-${offset}`, values: emb.data[0].embedding, metadata:{ pageId: pid, blockId: blk.id }});
+        // Determine embedding text
+        const embText = blockText.trim() || (
+          blk.type === 'media' && blk.url
+            ? `Media: ${blk.notionType || 'media'}\nURL: ${blk.url}`
+            : null
+        );
+
+        if (embText) {
+          for (let offset = 0; offset < embText.length; offset += CHUNK) {
+            const slice = embText.slice(offset, offset + CHUNK);
+            const emb = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
+
+            records.push({
+              id: `${pid}-${blk.id}-${offset}`,
+              values: emb.data[0].embedding,
+              metadata: {
+                pageId: pid,
+                blockId: blk.id,
+                notionType: blk.notionType,
+                blockType: blk.type,
+                fileName: filename || null,
+                originalUrl: blk.url || null,
+                sourceTitle: pageMeta?.properties?.title?.title?.[0]?.plain_text || '',
+                sourceUrl: `https://www.notion.so/${pid.replace(/-/g, '')}`
+              }
+            });
+          }
         }
       }
 
