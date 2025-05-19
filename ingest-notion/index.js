@@ -16,27 +16,6 @@ const fsSync                        = require('fs');
 const fetch                         = require('node-fetch');
 const crypto                        = require('crypto');
 
-// helper to detect content type for Document Analysis (non-image formats)
-function getContentType(filename) {
-  const ext = path.extname(filename || '').toLowerCase();
-  switch (ext) {
-    case '.pdf':  return 'application/pdf';
-    case '.doc':  return 'application/msword';
-    case '.docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    case '.xls':  return 'application/vnd.ms-excel';
-    case '.xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    case '.ppt':  return 'application/vnd.ms-powerpoint';
-    case '.pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-    case '.png':  return 'image/png';
-    case '.jpg':
-    case '.jpeg': return 'image/jpeg';
-    case '.bmp':  return 'image/bmp';
-    case '.tiff':
-    case '.tif':  return 'image/tiff';
-    default:      return 'application/octet-stream';
-  }
-}
-
 // Hash helper
 function hashText(text) {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16); // 16 chars should suffice
@@ -262,17 +241,33 @@ module.exports = async function (context, req) {
             }
           } else {
             context.log('RUNNING OTHER DOCUMENTS');
-            // Document Intelligence via REST SDK
-            const contentType = getContentType(filename);
+
+            // Construct blob name and client
+            const blobName = `${blk.type}-${pid}-${blk.id}-${filename}`;
+            const blobClient = rawContainer.getBlockBlobClient(blobName);
+
+            // Generate a SAS URL valid for 1 hour
+            const sasUrl = await blobClient.generateSasUrl({
+              expiresOn: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+              permissions: "r",
+            });
+
+            // Document Intelligence via REST SDK using the signed blob URL
             const analyzeResponse = await diClient
               .path('/documentModels/{modelId}:analyze', 'prebuilt-read')
-              .post({ contentType: 'application/json', body: { urlSource: blk.url } });
+              .post({
+                contentType: 'application/json',
+                body: { urlSource: sasUrl },
+              });
+
             if (isUnexpected(analyzeResponse)) {
               context.log.error('📄 DI analyzeResponse:', JSON.stringify(analyzeResponse.body, null, 2));
               throw new Error(analyzeResponse.body?.error?.message || 'Unexpected Document Intelligence error');
             }
+
             const poller = getLongRunningPoller(diClient, analyzeResponse);
             const diResult = (await poller.pollUntilDone()).body.analyzeResult;
+
             if (diResult.content) {
               blockText += diResult.content + '\n';
             } else if (diResult.pages) {
@@ -283,6 +278,7 @@ module.exports = async function (context, req) {
               }
             }
           }
+
           await fs.unlink(tmpPath);
           // save extraction
           const blobName = blk.type==='image' ?
