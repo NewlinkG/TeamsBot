@@ -88,14 +88,14 @@ module.exports = async function (context, req) {
       do {
         const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
         for (const b of resp.results) {
-          context.log('Notion block type', b.type);
+          // context.log('Notion block type', b.type);
           if (b.type === 'child_page') await walk(b.id);
           else if (b.type === 'child_database') {
             let dbCur;
             do {
               const qr = await notion.databases.query({ database_id: b.id, start_cursor: dbCur, page_size: 100 });
               for (const e of qr.results) {
-                context.log('Notion block type', e.id);
+                //context.log('Notion block type', e.id);
                 await walk(e.id);
               }
               dbCur = qr.has_more ? qr.next_cursor : undefined;
@@ -123,7 +123,7 @@ module.exports = async function (context, req) {
 
     // 2) Process each page incrementally
     for (const pid of toProcess) {
-      context.log('Processing page', pid);
+      // context.log('Processing page', pid);
       const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
       const props      = await metaClient.getProperties().catch(() => undefined);
       let pageMeta;
@@ -170,7 +170,7 @@ module.exports = async function (context, req) {
       const CHUNK   = 1000;
 
       for (const blk of blocks) {
-        context.log('RUNNING', blk.type.toUpperCase(), 'for block', blk.id);
+        context.log('RUNNING', blk.type.toUpperCase(), 'for block', blk.id, 'URL:', blk.url);
         const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
         let blockText = '';
 
