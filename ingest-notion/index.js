@@ -151,7 +151,7 @@ module.exports = async function (context, req) {
             const block = { id: b.id, notionType: b.type };
 
             // Text-like blocks
-            if (['paragraph','heading_1','heading_2','quote','callout','code','bulleted_list_item','numbered_list_item','to_do','toggle'].includes(b.type)) {
+            if (['paragraph','heading_1','heading_2','heading_3','quote','callout','code','bulleted_list_item','numbered_list_item','to_do','toggle'].includes(b.type)) {
               block.type = 'text';
               block.text = b[b.type]?.rich_text?.map(t => t.plain_text).join('') || '';
               acc.push(block);
@@ -190,6 +190,11 @@ module.exports = async function (context, req) {
             // Layout wrappers — recurse only
             else if (['synced_block', 'column', 'column_list'].includes(b.type)) {
               if (b.has_children) await fetchBlocks(b.id, acc);
+              continue;
+            }
+
+            else if (b.type === 'child_database') {
+              context.log('ℹ️ Skipping child_database block in fetchBlocks; already processed via walk()');
               continue;
             }
 
