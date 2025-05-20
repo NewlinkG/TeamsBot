@@ -118,6 +118,7 @@ module.exports = async function (context, req) {
 
     await discoverAllAccessibleRoots();
     
+
     // ——— Garbage-collect pages deleted in Notion ———
     const existing = [];
     for await (const blob of rawContainer.listBlobsFlat({ prefix: 'page-' })) {
@@ -141,6 +142,44 @@ module.exports = async function (context, req) {
         context.log(`✅ Purged vectors for deleted page ${id}`);
       }
     }
+
+    // Now we clean up deleted files and images
+    for (const pid of toProcess) {
+      // 1) list the blobs in RAW_CONTAINER for that page
+      const rawPrefix  = `image-${pid}-`;
+      const filePrefix = `file-${pid}-`;
+      const existingBlobs = [];
+      for await (const b of rawContainer.listBlobsFlat({ prefix: rawPrefix })) {
+        existingBlobs.push(b.name);  // e.g. "image-<pid>-foo.png"
+      }
+      for await (const b of rawContainer.listBlobsFlat({ prefix: filePrefix })) {
+        existingBlobs.push(b.name);  // e.g. "file-<pid>-report.pdf"
+      }
+
+      // 2) build the set of “current” filenames from your fetched blocks
+      //    assume you already ran `const blocks = await fetchBlocks(pid)`
+      const currentFiles = new Set();
+      for (const blk of blocks) {
+        if (blk.type === 'image' || blk.type === 'file') {
+          const filename = path.basename(new URL(blk.url).pathname);
+          currentFiles.add(`${blk.type}-${pid}-${filename}`);
+        }
+      }
+
+      // 3) delete any blob that’s in existingBlobs but not in currentFiles
+      for (const name of existingBlobs) {
+        if (!currentFiles.has(name)) {
+          context.log(`🗑️ Deleting orphaned attachment blob: ${name}`);
+          await rawContainer.deleteBlob(name);
+          // also delete any extracted‐text for files:
+          if (name.startsWith('file-')) {
+            const txtName = `txt-${pid}-${name.split('-').slice(2).join('-')}.txt`;
+            await extractedContainer.deleteBlob(txtName).catch(()=>{/*ignore if missing*/});
+          }
+        }
+      }
+    }
+
 
     // 2) Process each page incrementally
     for (const pid of toProcess) {
