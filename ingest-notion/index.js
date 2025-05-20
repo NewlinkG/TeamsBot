@@ -81,6 +81,77 @@ module.exports = async function (context, req) {
     const seen = new Set();
     const toProcess = [];
 
+    // fetch blocks
+    async function fetchBlocks(id, acc = []) {
+      let cursor;
+      do {
+        const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
+        for (const b of resp.results) {
+          context.log('Notion block type', b.type);
+          const block = { id: b.id, notionType: b.type };
+
+          // Text-like blocks
+          if (['paragraph','heading_1','heading_2','heading_3','quote','callout','code','bulleted_list_item','numbered_list_item','to_do','toggle'].includes(b.type)) {
+            block.type = 'text';
+            block.text = b[b.type]?.rich_text?.map(t => t.plain_text).join('') || '';
+            acc.push(block);
+            if (b.has_children) await fetchBlocks(b.id, acc);
+            continue;
+          }
+
+          // Images and files
+          else if (b.type === 'image') {
+            const url = b.image?.file?.url || b.image?.external?.url;
+            if (url) {
+              block.type = 'image';
+              block.url = url;
+              acc.push(block);
+            }
+          }
+          else if (b.type === 'file' || b.type === 'pdf') {
+            const url = b.file?.file?.url || b.file?.external?.url;
+            if (url) {
+              block.type = 'file';
+              block.url = url;
+              acc.push(block);
+            }
+          }
+
+          // Embeds and videos
+          else if (['video', 'embed', 'bookmark', 'link_preview'].includes(b.type)) {
+            const url = b[b.type]?.url || b[b.type]?.external?.url;
+            if (url) {
+              block.type = 'media';
+              block.url = url;
+              acc.push(block);
+            }
+          }
+
+          // Layout wrappers — recurse only
+          else if (['synced_block', 'column', 'column_list'].includes(b.type)) {
+            if (b.has_children) await fetchBlocks(b.id, acc);
+            continue;
+          }
+
+          else if (b.type === 'child_database') {
+            context.log('ℹ️ Skipping child_database block in fetchBlocks; already processed via walk()');
+            continue;
+          }
+
+          // Unknown — recurse if possible
+          else {
+            context.log.warn(`⚠️ Unrecognized block type: ${b.type}`);
+            if (b.has_children) await fetchBlocks(b.id, acc);
+            continue;
+          }
+        }
+
+        cursor = resp.has_more ? resp.next_cursor : undefined;
+      } while (cursor);
+
+      return acc;
+    }
+
     async function walk(id) {
       if (seen.has(id)) return;
       seen.add(id);
@@ -143,6 +214,43 @@ module.exports = async function (context, req) {
       }
     }
 
+
+    // 3) Attachment-level GC: delete any image/file blobs you’ve unlinked in Notion
+    context.log('Starting file cleanup for attachments');
+
+    for (const pid of toProcess) {
+      // grab the live blocks for this page
+      const pageBlocks = await fetchBlocks(pid);
+
+      // list all existing blobs for this page
+      const existing = [];
+      for await (const b of rawContainer.listBlobsFlat({ prefix: `image-${pid}-` })) existing.push(b.name);
+      for await (const b of rawContainer.listBlobsFlat({ prefix: `file-${pid}-`  })) existing.push(b.name);
+
+      // build a set of the filenames still in Notion
+      const liveSet = new Set(
+        pageBlocks
+          .filter(b => b.type === 'image' || b.type === 'file')
+          .map(b => {
+            const fn = path.basename(new URL(b.url).pathname);
+            return `${b.type}-${pid}-${fn}`;
+          })
+      );
+
+      // delete any blob that isn’t live anymore
+      for (const name of existing) {
+        if (!liveSet.has(name)) {
+          context.log(`🗑️ Deleting orphaned blob ${name}`);
+          await rawContainer.deleteBlob(name);
+          if (name.startsWith('file-')) {
+            const txtName = `txt-${pid}-${name.split('-').slice(2).join('-')}.txt`;
+            await extractedContainer.deleteBlob(txtName).catch(()=>{});
+          }
+        }
+      }
+    }
+
+
     // 2) Process each page incrementally
     for (const pid of toProcess) {
       // context.log('Processing page', pid);
@@ -166,118 +274,7 @@ module.exports = async function (context, req) {
         continue;
       }
 
-      // fetch blocks
-      async function fetchBlocks(id, acc = []) {
-        let cursor;
-        do {
-          const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
-          for (const b of resp.results) {
-            context.log('Notion block type', b.type);
-            const block = { id: b.id, notionType: b.type };
-
-            // Text-like blocks
-            if (['paragraph','heading_1','heading_2','heading_3','quote','callout','code','bulleted_list_item','numbered_list_item','to_do','toggle'].includes(b.type)) {
-              block.type = 'text';
-              block.text = b[b.type]?.rich_text?.map(t => t.plain_text).join('') || '';
-              acc.push(block);
-              if (b.has_children) await fetchBlocks(b.id, acc);
-              continue;
-            }
-
-            // Images and files
-            else if (b.type === 'image') {
-              const url = b.image?.file?.url || b.image?.external?.url;
-              if (url) {
-                block.type = 'image';
-                block.url = url;
-                acc.push(block);
-              }
-            }
-            else if (b.type === 'file' || b.type === 'pdf') {
-              const url = b.file?.file?.url || b.file?.external?.url;
-              if (url) {
-                block.type = 'file';
-                block.url = url;
-                acc.push(block);
-              }
-            }
-
-            // Embeds and videos
-            else if (['video', 'embed', 'bookmark', 'link_preview'].includes(b.type)) {
-              const url = b[b.type]?.url || b[b.type]?.external?.url;
-              if (url) {
-                block.type = 'media';
-                block.url = url;
-                acc.push(block);
-              }
-            }
-
-            // Layout wrappers — recurse only
-            else if (['synced_block', 'column', 'column_list'].includes(b.type)) {
-              if (b.has_children) await fetchBlocks(b.id, acc);
-              continue;
-            }
-
-            else if (b.type === 'child_database') {
-              context.log('ℹ️ Skipping child_database block in fetchBlocks; already processed via walk()');
-              continue;
-            }
-
-            // Unknown — recurse if possible
-            else {
-              context.log.warn(`⚠️ Unrecognized block type: ${b.type}`);
-              if (b.has_children) await fetchBlocks(b.id, acc);
-              continue;
-            }
-          }
-
-          cursor = resp.has_more ? resp.next_cursor : undefined;
-        } while (cursor);
-
-        return acc;
-      }
-
       const blocks = await fetchBlocks(pid);
-
-
-      context.log('Starting file cleanup');
-      
-      // Now we clean up deleted files and images
-      for (const pid of toProcess) {
-        // 1) list the blobs in RAW_CONTAINER for that page
-        const rawPrefix  = `image-${pid}-`;
-        const filePrefix = `file-${pid}-`;
-        const existingBlobs = [];
-        for await (const b of rawContainer.listBlobsFlat({ prefix: rawPrefix })) {
-          existingBlobs.push(b.name);  // e.g. "image-<pid>-foo.png"
-        }
-        for await (const b of rawContainer.listBlobsFlat({ prefix: filePrefix })) {
-          existingBlobs.push(b.name);  // e.g. "file-<pid>-report.pdf"
-        }
-
-        // 2) build the set of “current” filenames from your fetched blocks
-        //    assume you already ran `const blocks = await fetchBlocks(pid)`
-        const currentFiles = new Set();
-        for (const blk of blocks) {
-          if (blk.type === 'image' || blk.type === 'file') {
-            const filename = path.basename(new URL(blk.url).pathname);
-            currentFiles.add(`${blk.type}-${pid}-${filename}`);
-          }
-        }
-
-        // 3) delete any blob that’s in existingBlobs but not in currentFiles
-        for (const name of existingBlobs) {
-          if (!currentFiles.has(name)) {
-            context.log(`🗑️ Deleting orphaned attachment blob: ${name}`);
-            await rawContainer.deleteBlob(name);
-            // also delete any extracted‐text for files:
-            if (name.startsWith('file-')) {
-              const txtName = `txt-${pid}-${name.split('-').slice(2).join('-')}.txt`;
-              await extractedContainer.deleteBlob(txtName).catch(()=>{/*ignore if missing*/});
-            }
-          }
-        }
-      }
 
 
       // 🆕 Process file properties from database entry (if any)
