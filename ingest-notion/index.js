@@ -117,6 +117,30 @@ module.exports = async function (context, req) {
     }
 
     await discoverAllAccessibleRoots();
+    
+    // ——— Garbage-collect pages deleted in Notion ———
+    const existing = [];
+    for await (const blob of rawContainer.listBlobsFlat({ prefix: 'page-' })) {
+      // blob.name === 'page-<ID>.json'
+      existing.push(blob.name.slice(5, -5)); // strip “page-” and “.json”
+    }
+
+    const removed = existing.filter(id => !toProcess.includes(id));
+    if (removed.length) {
+      context.log(`🗑️ Removing pages no longer in Notion:`, removed);
+
+      // 1) delete their metadata & raw blobs
+      for (const id of removed) {
+        await rawContainer.deleteBlob(`page-${id}.json`);
+        await extractedContainer.deleteBlob(`txt-${id}-*.txt`); // list&delete wildcard-matched blobs
+      }
+
+      // 2) delete all their vectors by metadata filter
+      for (const id of removed) {
+        await pineIndex.delete({ filter: { pageId: id } });
+        context.log(`✅ Purged vectors for deleted page ${id}`);
+      }
+    }
 
     // 2) Process each page incrementally
     for (const pid of toProcess) {
