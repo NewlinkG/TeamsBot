@@ -233,7 +233,7 @@ module.exports = async function (context, req) {
           .filter(b => b.type === 'image' || b.type === 'file')
           .map(b => {
             const fn = path.basename(new URL(b.url).pathname);
-            return `${b.type}-${pid}-${fn}`;
+            return `${b.type}-${pid}-${b.id}-${fn}`;
           })
       );
 
@@ -242,9 +242,20 @@ module.exports = async function (context, req) {
         if (!liveSet.has(name)) {
           context.log(`🗑️ Deleting orphaned blob ${name}`);
           await rawContainer.deleteBlob(name);
+
+          // if this was a file-attachment, delete its extracted text
           if (name.startsWith('file-')) {
-            const txtName = `txt-${pid}-${name.split('-').slice(2).join('-')}.txt`;
+            const [, , blockId, ...rest] = name.split('-');
+            const fn = rest.join('-');
+            const txtName = `txt-${pid}-${blockId}-${fn}.txt`;
             await extractedContainer.deleteBlob(txtName).catch(()=>{});
+          }
+          // if this was an image, delete its OCR text
+          else if (name.startsWith('image-')) {
+            const [, , blockId, ...rest] = name.split('-');
+            const fn = rest.join('-');
+            const ocrName = `ocr-${pid}-${blockId}-${fn}.txt`;
+            await extractedContainer.deleteBlob(ocrName).catch(()=>{});
           }
         }
       }
