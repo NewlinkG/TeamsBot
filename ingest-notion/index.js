@@ -240,6 +240,8 @@ module.exports = async function (context, req) {
       const blocks = await fetchBlocks(pid);
 
 
+      context.log('Starting file cleanup');
+      
       // Now we clean up deleted files and images
       for (const pid of toProcess) {
         // 1) list the blobs in RAW_CONTAINER for that page
