@@ -246,6 +246,24 @@ module.exports = async function (context, req) {
       // full sync
       const blocks = await fetchBlocks(pid);
 
+      // ─── re-add any “Files & media” property attachments ───
+      for (const [key, prop] of Object.entries(pageMeta.properties || {})) {
+        if (prop.type === 'files' && Array.isArray(prop.files)) {
+          for (const f of prop.files) {
+            const url = f.file?.url || f.external?.url;
+            if (!url) continue;
+            const ext = path.extname(f.name).toLowerCase();
+            blocks.push({
+              id:    `${pid}-${key}`,                              // unique per-property
+              type:  ['.png','.jpg','.jpeg','.bmp','.tif','.tiff']
+                     .includes(ext) ? 'image' : 'file',
+              notionType: 'property',
+              url
+            });
+          }
+        }
+      }
+
       // upload text & attachments
       const records = [];
       const CHUNK   = 1000;
@@ -345,8 +363,8 @@ module.exports = async function (context, req) {
       }
 
       if (oldIds.length) {
-        await pineIndex.delete(
-        recordIds,                   // <-- array of IDs
+        await pineIndex.deleteMany(
+        oldIds,                   // <-- array of expired IDs
         { namespace: 'notion' }      // <-- namespace option
       );
       }
