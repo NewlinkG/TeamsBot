@@ -222,6 +222,30 @@ module.exports = async function (context, req) {
       // grab the live blocks for this page
       const pageBlocks = await fetchBlocks(pid);
 
+      // 🆕 Process file properties from database entry (if any)
+      const propertyBlocks = [];
+      for (const [key, prop] of Object.entries(pageMeta.properties || {})) {
+        if (prop?.type === 'files' && Array.isArray(prop.files)) {
+          for (const f of prop.files) {
+            const url = f?.file?.url || f?.external?.url;
+            if (url) {
+              const ext = path.extname(f.name || '').toLowerCase();
+              const isImage = ['.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'].includes(ext);
+
+              propertyBlocks.push({
+                id: `${pid}-${key}`,
+                type: isImage ? 'image' : 'file',
+                notionType: 'property',
+                url,
+                fileName: f.name || ''
+              });
+            }
+          }
+        }
+      }
+      // Append to blocks array for unified processing
+      pageBlocks.push(...propertyBlocks);
+
       // list all existing blobs for this page
       const existing = [];
       for await (const b of rawContainer.listBlobsFlat({ prefix: `image-${pid}-` })) existing.push(b.name);
