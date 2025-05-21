@@ -332,10 +332,9 @@ module.exports = async function (context, req) {
         }
       }
 
-      await pineIndex.delete({
-        filter:    { pageId: pid },
-        namespace: 'notion'
-      });
+      await pineIndex
+        .namespace('notion')
+        .deleteMany({ pageId: pid });
       
       if (records.length) await pineIndex.namespace('notion').upsert(records);
 
