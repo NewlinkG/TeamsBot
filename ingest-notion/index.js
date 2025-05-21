@@ -331,6 +331,8 @@ module.exports = async function (context, req) {
         }
       }
 
+      await pineIndex.namespace('notion').delete({ filter: { pageId: pid } });
+      
       if (records.length) await pineIndex.namespace('notion').upsert(records);
 
       // record last sync time
