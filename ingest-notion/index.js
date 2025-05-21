@@ -345,10 +345,10 @@ module.exports = async function (context, req) {
       }
 
       if (oldIds.length) {
-        await pineIndex.deleteMany({
-          ids:       oldIds,
-          namespace: 'notion'
-        });
+        await pineIndex.delete(
+        recordIds,                   // <-- array of IDs
+        { namespace: 'notion' }      // <-- namespace option
+      );
       }
       
       if (records.length) await pineIndex.namespace('notion').upsert(records);
