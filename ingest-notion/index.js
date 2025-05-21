@@ -75,7 +75,7 @@ module.exports = async function (context, req) {
     async function fetchBlocks(id, acc = []) {
       let cursor;
       do {
-        const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
+        const resp = await withNotionRetry(notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 }));
         for (const b of resp.results) {
           const block = { id: b.id, notionType: b.type };
           // Text-like
@@ -120,13 +120,13 @@ module.exports = async function (context, req) {
       seen.add(id); toProcess.push(id);
       let cursor;
       do {
-        const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
+        const resp = await withNotionRetry(notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 }));
         for (const b of resp.results) {
           if (b.type === 'child_page') await walk(b.id);
           else if (b.type === 'child_database') {
             let dbCur;
             do {
-              const qr = await notion.databases.query({ database_id: b.id, start_cursor: dbCur, page_size: 100 });
+              const qr = await withNotionRetry(notion.databases.query({ database_id: b.id, start_cursor: dbCur, page_size: 100 }));
               for (const e of qr.results) await walk(e.id);
               dbCur = qr.has_more ? qr.next_cursor : undefined;
             } while (dbCur);
@@ -138,7 +138,7 @@ module.exports = async function (context, req) {
     async function discoverAllAccessibleRoots() {
       let cursor;
       do {
-        const resp = await notion.search({ start_cursor: cursor, page_size: 100 });
+        const resp = await withNotionRetry(notion.search({ start_cursor: cursor, page_size: 100 }));
         for (const result of resp.results) {
           if ((result.object === 'page' || result.object === 'database') && result.id) {
             await walk(result.id);
@@ -225,7 +225,7 @@ module.exports = async function (context, req) {
     for (const pid of toProcess) {
       let pageMeta;
       try {
-        pageMeta = await notion.pages.retrieve({ page_id: pid });
+        pageMeta = await withNotionRetry(notion.pages.retrieve({ page_id: pid }));
       } catch (err) {
         if (err.code === 'object_not_found') {
           context.log.warn(`⚠️ Skipping inaccessible page ${pid}`);
