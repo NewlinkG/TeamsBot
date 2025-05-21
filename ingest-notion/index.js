@@ -332,34 +332,33 @@ module.exports = async function (context, req) {
         }
       }
 
-      // 1) Find all vectors for this page in the "notion" namespace
-      const queryRes = await pineIndex
-        .namespace('notion')
-        .query({
-          filter:          { pageId: pid },
-          topK:            1000000,
-          includeValues:   false,
-          includeMetadata: false
-        });
+      const recordIds = records.map(r => r.id);
 
-      // 2) Extract the IDs
-      const toDelete = (queryRes.matches || []).map(m => m.id);
+      const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
+      let oldIds = [];
+      try {
+        const props = await metaClient.downloadToBuffer();
+        const md = JSON.parse(props.toString());
+        oldIds = md.recordIds || [];
+      } catch {
+        context.log('No previous metadata or no recordIds field → nothing to delete');
+      }
 
-      if (toDelete.length) {
-        // 3) Delete them by ID on the root index
+      if (oldIds.length) {
         await pineIndex.deleteMany({
-          ids:       toDelete,
+          ids:       oldIds,
           namespace: 'notion'
         });
       }
       
       if (records.length) await pineIndex.namespace('notion').upsert(records);
 
-      // record last sync time
-      const md = { [lastKey]: pageMeta.last_edited_time };
-      const buf = Buffer.from(JSON.stringify(md), 'utf8');
-      await rawContainer.getBlockBlobClient(`page-${pid}.json`)
-        .uploadData(buf, { metadata: md });
+      // record last sync time (metadata only needs lastedited; recordIds live in content)
+      const newMeta = { [lastKey]: pageMeta.last_edited_time, recordIds };
+      const buf = Buffer.from(JSON.stringify(newMeta), 'utf8');
+      await rawContainer
+        .getBlockBlobClient(`page-${pid}.json`)
+        .uploadData(buf, { metadata: { lastedited: pageMeta.last_edited_time } });
 
       // always clean up attachments afterwards
       await garbageCollectAttachments(pid, pageMeta);
