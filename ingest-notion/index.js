@@ -332,7 +332,26 @@ module.exports = async function (context, req) {
         }
       }
 
-      await pineIndex.deleteMany({ pageId: pid });
+      // 1) Find all vectors for this page in the "notion" namespace
+      const queryRes = await pineIndex
+        .namespace('notion')
+        .query({
+          filter:          { pageId: pid },
+          topK:            1000000,
+          includeValues:   false,
+          includeMetadata: false
+        });
+
+      // 2) Extract the IDs
+      const toDelete = (queryRes.matches || []).map(m => m.id);
+
+      if (toDelete.length) {
+        // 3) Delete them by ID on the root index
+        await pineIndex.deleteMany({
+          ids:       toDelete,
+          namespace: 'notion'
+        });
+      }
       
       if (records.length) await pineIndex.namespace('notion').upsert(records);
 
