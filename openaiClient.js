@@ -130,7 +130,21 @@ async function callAzureOpenAI(input, detectedLanguage = "es") {
  * onDelta will be called for each chunk of text as it arrives.
  */
 async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta) {
-  const messages = buildMessages(input, detectedLanguage, false);
+  let messages = buildMessages(input, detectedLanguage, false);
+
+  // If retrieval was requested, prepend context
+  if (options.withRetrieval && typeof input === 'string') {
+    const docs = await retrieveContext(input, options.topK || 5);
+    const ctxText = docs
+      .map((d,i) => `Source [${i+1}]: ${d.sourceTitle} — ${d.sourceUrl}\n${d.text}`)
+      .join("\n\n");
+    messages.unshift({
+      role: "system",
+      content:
+        "Use the following Notion references when answering. Cite each source by its number in brackets:\n\n" +
+        ctxText
+    });
+  }
 
   // **ADD the missing `await` here** so that `stream` becomes the async iterable
   const stream = await client.chat.completions.create({
