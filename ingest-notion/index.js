@@ -63,6 +63,12 @@ module.exports = async function (context, req) {
     const diClient = DocumentIntelligenceClient(DI_ENDPOINT, new AzureKeyCredential(DI_KEY));
     const sleep = ms => new Promise(res => setTimeout(res, ms));
 
+    function extractTitle(properties = {}) {
+      const titleProp = Object.values(properties)
+        .find(p => p.type === 'title' && Array.isArray(p.title) && p.title[0]);
+      return titleProp ? titleProp.title[0].plain_text : '';
+    }
+
     // 1) Discover all pages
     const seen = new Set();
     const toProcess = [];
@@ -312,7 +318,14 @@ module.exports = async function (context, req) {
             records.push({
               id: `${pid}-${blk.id}-${offset}`,
               values: emb.data[0].embedding,
-              metadata: { pageId: pid, blockId: blk.id, blockType: blk.type, originalUrl: blk.url||'', sourceTitle: pageMeta.properties.title.title[0]?.plain_text||'', sourceUrl: `https://www.notion.so/${pid.replace(/-/g,'')}` }
+              metadata: {
+                pageId: pid,
+                blockId: blk.id,
+                blockType: blk.type,
+                originalUrl: blk.url || '',
+                sourceTitle: extractTitle(pageMeta.properties),
+                sourceUrl: `https://www.notion.so/${pid.replace(/-/g,'')}`
+              }
             });
           }
         }
