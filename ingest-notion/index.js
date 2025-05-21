@@ -250,6 +250,7 @@ module.exports = async function (context, req) {
       const records = [];
       const CHUNK   = 1000;
       for (const blk of blocks) {
+        context.log('Processing: ', blk.id, '-', blk.url);
         const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
         let blockText = '';
 
@@ -331,7 +332,10 @@ module.exports = async function (context, req) {
         }
       }
 
-      await pineIndex.namespace('notion').delete({ filter: { pageId: pid } });
+      await pineIndex.delete({
+        filter:    { pageId: pid },
+        namespace: 'notion'
+      });
       
       if (records.length) await pineIndex.namespace('notion').upsert(records);
 
