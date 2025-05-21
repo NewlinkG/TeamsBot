@@ -256,9 +256,15 @@ class TeamsBot extends ActivityHandler {
     }
 
     // 5) FALLBACK NORMAL CHAT
+    // Try retrieval-augmented generation first
     await context.sendActivity({ type:'typing' });
-    let reply = '';
-    await callAzureOpenAIStream(text, lang, chunk => reply += chunk);
+    const prompt = text;
+     // Note: callAzureOpenAI supports streaming too if you adapt it similarly
+     const reply = await callAzureOpenAI(
+      prompt,
+      lang,
+      { withRetrieval: true, topK: 5 }
+    );
     await context.sendActivity(reply);
 
     await this.draftAccessor.set(context, draft);

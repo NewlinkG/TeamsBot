@@ -1,6 +1,7 @@
 // openaiClient.js
 
 const { AzureOpenAI } = require("openai");
+const { retrieveContext } = require("./retrievalClient");
 require("dotenv").config();
 
 // ———————— Azure OpenAI setup ————————
@@ -97,7 +98,21 @@ function buildMessages(input, lang, useClassifier = false) {
 
 // ———————— Non-streaming chat call ————————
 async function callAzureOpenAI(input, detectedLanguage = "es") {
-  const messages = buildMessages(input, detectedLanguage, false);
+  let messages = buildMessages(input, detectedLanguage, false);
+
+  // If retrieval was requested, prepend context
+  if (options.withRetrieval && typeof input === 'string') {
+    const docs = await retrieveContext(input, options.topK || 5);
+    const ctxText = docs
+      .map((d,i) => `Source [${i+1}]: ${d.sourceTitle} — ${d.sourceUrl}\n${d.text}`)
+      .join("\n\n");
+    messages.unshift({
+      role: "system",
+      content:
+        "Use the following Notion references when answering. Cite each source by its number in brackets:\n\n" +
+        ctxText
+    });
+  }
 
   const response = await client.chat.completions.create({
     messages,
