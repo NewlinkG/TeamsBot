@@ -238,146 +238,146 @@ module.exports = async function (context, req) {
       const client = rawContainer.getBlockBlobClient(`page-${pid}.json`);
       const props = await client.getProperties().catch(() => undefined);
       const lastKey = 'lastedited';
-      if (props?.metadata?.[lastKey] === pageMeta.last_edited_time) {
-        context.log(`↩️ ${pid} unchanged since ${pageMeta.last_edited_time}; skipping.`);
-        continue;
-      }
+      
+      const unchanged = props?.metadata?.[lastKey] === pageMeta.last_edited_time;
+      if (unchanged) {
+        context.log(`↩️ ${pid} unchanged since ${pageMeta.last_edited_time}; skipping full sync.`);
+      } else {
+        // full sync
+        const blocks = await fetchBlocks(pid);
 
-      // full sync
-      const blocks = await fetchBlocks(pid);
-
-      // ─── re-add any “Files & media” property attachments ───
-      for (const [key, prop] of Object.entries(pageMeta.properties || {})) {
-        if (prop.type === 'files' && Array.isArray(prop.files)) {
-          for (const f of prop.files) {
-            const url = f.file?.url || f.external?.url;
-            if (!url) continue;
-            const ext = path.extname(f.name).toLowerCase();
-            blocks.push({
-              id:    `${pid}-${key}`,                              // unique per-property
-              type:  ['.png','.jpg','.jpeg','.bmp','.tif','.tiff']
-                     .includes(ext) ? 'image' : 'file',
-              notionType: 'property',
-              url
-            });
+        // ─── re-add any “Files & media” property attachments ───
+        for (const [key, prop] of Object.entries(pageMeta.properties || {})) {
+          if (prop.type === 'files' && Array.isArray(prop.files)) {
+            for (const f of prop.files) {
+              const url = f.file?.url || f.external?.url;
+              if (!url) continue;
+              const ext = path.extname(f.name).toLowerCase();
+              blocks.push({
+                id:    `${pid}-${key}`,                              // unique per-property
+                type:  ['.png','.jpg','.jpeg','.bmp','.tif','.tiff']
+                      .includes(ext) ? 'image' : 'file',
+                notionType: 'property',
+                url
+              });
+            }
           }
         }
-      }
 
-      // upload text & attachments
-      const records = [];
-      const CHUNK   = 1000;
-      for (const blk of blocks) {
-        context.log('Processing: ', blk.id, '-', blk.url);
-        const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
-        let blockText = '';
+        // upload text & attachments
+        const records = [];
+        const CHUNK   = 1000;
+        for (const blk of blocks) {
+          context.log('Processing: ', blk.id, '-', blk.url);
+          const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
+          let blockText = '';
 
-        if (blk.type === 'text') {
-          blockText = blk.text + '\n';
-          const blobName = `txt-${pid}-${blk.id}.txt`;
-          const textClient = extractedContainer.getBlockBlobClient(blobName);
-          if (!(await textClient.exists())) {
-            await textClient.upload(blockText, Buffer.byteLength(blockText));
-          }
-        } else {
-          // upload raw blob
-          const tmpPath = path.join(os.tmpdir(), filename);
-          const buf = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
-          if (buf.length > 4 * 1024 * 1024) blk.type = 'file';
-          await fs.writeFile(tmpPath, buf);
-          await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`)
-            .uploadFile(tmpPath);
-
-          // OCR or DI
-          if (blk.type === 'image') {
-            // Computer Vision OCR...
-            let readResp;
-            for (let i=0; i<5; i++) {
-              try { readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath)); break; }
-              catch (e) { if (e instanceof RestError && e.message.includes('rate limit')) await sleep(3000*(i+1)); else throw e; }
-            }
-            const opId = readResp.operationLocation.split('/').pop();
-            let ocrRes;
-            while (true) {
-              try { ocrRes = await cvClient.getReadResult(opId); }
-              catch (e) { if (e instanceof RestError && e.response.headers.get('retry-after')) { await sleep(parseInt(e.response.headers.get('retry-after'),10)*1000); continue; } throw e; }
-              if (['succeeded','failed'].includes(ocrRes.status.toLowerCase())) break;
-              await sleep(3000);
-            }
-            if (ocrRes.status.toLowerCase()==='succeeded') {
-              for (const pg of ocrRes.analyzeResult.readResults||[])
-                for (const ln of pg.lines) blockText += ln.text + '\n';
+          if (blk.type === 'text') {
+            blockText = blk.text + '\n';
+            const blobName = `txt-${pid}-${blk.id}.txt`;
+            const textClient = extractedContainer.getBlockBlobClient(blobName);
+            if (!(await textClient.exists())) {
+              await textClient.upload(blockText, Buffer.byteLength(blockText));
             }
           } else {
-            // Document Intelligence...
-            const blobCli = rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`);
-            const sasUrl = await blobCli.generateSasUrl({ expiresOn: new Date(Date.now()+3600e3), permissions: "r" });
-            const analyzeResponse = await diClient.path('/documentModels/{modelId}:analyze','prebuilt-read').post({ contentType:'application/json', body:{ urlSource: sasUrl }});
-            if (isUnexpected(analyzeResponse)) throw new Error(analyzeResponse.body.error?.message);
-            const poller = getLongRunningPoller(diClient, analyzeResponse);
-            const diResult = (await poller.pollUntilDone()).body.analyzeResult;
-            if (diResult.content) blockText += diResult.content + '\n';
-            else for (const pg of diResult.pages||[]) for (const ln of pg.lines||[]) blockText += ln.content + '\n';
-          }
-          await fs.unlink(tmpPath);
+            // upload raw blob
+            const tmpPath = path.join(os.tmpdir(), filename);
+            const buf = Buffer.from(await (await fetch(blk.url)).arrayBuffer());
+            if (buf.length > 4 * 1024 * 1024) blk.type = 'file';
+            await fs.writeFile(tmpPath, buf);
+            await rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`)
+              .uploadFile(tmpPath);
 
-          const outName = blk.type==='image'
-            ? `ocr-${pid}-${blk.id}-${filename}.txt`
-            : `txt-${pid}-${blk.id}-${filename}.txt`;
-          await extractedContainer.getBlockBlobClient(outName)
-            .upload(blockText, Buffer.byteLength(blockText));
-        }
-
-        // embeddings
-        const embText = blockText.trim() || (blk.url ? `Media URL: ${blk.url}` : null);
-        if (embText) {
-          for (let offset=0; offset<embText.length; offset+=CHUNK) {
-            const slice = embText.slice(offset, offset+CHUNK);
-            const emb = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
-            records.push({
-              id: `${pid}-${blk.id}-${offset}`,
-              values: emb.data[0].embedding,
-              metadata: {
-                pageId: pid,
-                blockId: blk.id,
-                blockType: blk.type,
-                originalUrl: blk.url || '',
-                sourceTitle: extractTitle(pageMeta.properties),
-                sourceUrl: `https://www.notion.so/${pid.replace(/-/g,'')}`
+            // OCR or DI
+            if (blk.type === 'image') {
+              // Computer Vision OCR...
+              let readResp;
+              for (let i=0; i<5; i++) {
+                try { readResp = await cvClient.readInStream(() => fsSync.createReadStream(tmpPath)); break; }
+                catch (e) { if (e instanceof RestError && e.message.includes('rate limit')) await sleep(3000*(i+1)); else throw e; }
               }
-            });
+              const opId = readResp.operationLocation.split('/').pop();
+              let ocrRes;
+              while (true) {
+                try { ocrRes = await cvClient.getReadResult(opId); }
+                catch (e) { if (e instanceof RestError && e.response.headers.get('retry-after')) { await sleep(parseInt(e.response.headers.get('retry-after'),10)*1000); continue; } throw e; }
+                if (['succeeded','failed'].includes(ocrRes.status.toLowerCase())) break;
+                await sleep(3000);
+              }
+              if (ocrRes.status.toLowerCase()==='succeeded') {
+                for (const pg of ocrRes.analyzeResult.readResults||[])
+                  for (const ln of pg.lines) blockText += ln.text + '\n';
+              }
+            } else {
+              // Document Intelligence...
+              const blobCli = rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`);
+              const sasUrl = await blobCli.generateSasUrl({ expiresOn: new Date(Date.now()+3600e3), permissions: "r" });
+              const analyzeResponse = await diClient.path('/documentModels/{modelId}:analyze','prebuilt-read').post({ contentType:'application/json', body:{ urlSource: sasUrl }});
+              if (isUnexpected(analyzeResponse)) throw new Error(analyzeResponse.body.error?.message);
+              const poller = getLongRunningPoller(diClient, analyzeResponse);
+              const diResult = (await poller.pollUntilDone()).body.analyzeResult;
+              if (diResult.content) blockText += diResult.content + '\n';
+              else for (const pg of diResult.pages||[]) for (const ln of pg.lines||[]) blockText += ln.content + '\n';
+            }
+            await fs.unlink(tmpPath);
+
+            const outName = blk.type==='image'
+              ? `ocr-${pid}-${blk.id}-${filename}.txt`
+              : `txt-${pid}-${blk.id}-${filename}.txt`;
+            await extractedContainer.getBlockBlobClient(outName)
+              .upload(blockText, Buffer.byteLength(blockText));
+          }
+
+          // embeddings
+          const embText = blockText.trim() || (blk.url ? `Media URL: ${blk.url}` : null);
+          if (embText) {
+            for (let offset=0; offset<embText.length; offset+=CHUNK) {
+              const slice = embText.slice(offset, offset+CHUNK);
+              const emb = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
+              records.push({
+                id: `${pid}-${blk.id}-${offset}`,
+                values: emb.data[0].embedding,
+                metadata: {
+                  pageId: pid,
+                  blockId: blk.id,
+                  blockType: blk.type,
+                  originalUrl: blk.url || '',
+                  sourceTitle: extractTitle(pageMeta.properties),
+                  sourceUrl: `https://www.notion.so/${pid.replace(/-/g,'')}`
+                }
+              });
+            }
           }
         }
+
+        const recordIds = records.map(r => r.id);
+
+        const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
+        let oldIds = [];
+        try {
+          const props = await metaClient.downloadToBuffer();
+          const md = JSON.parse(props.toString());
+          oldIds = md.recordIds || [];
+        } catch {
+          context.log('No previous metadata or no recordIds field → nothing to delete');
+        }
+
+        if (oldIds.length) {
+          await pineIndex.deleteMany(
+          oldIds,                   // <-- array of expired IDs
+          { namespace: 'notion' }      // <-- namespace option
+        );
+        }
+        
+        if (records.length) await pineIndex.namespace('notion').upsert(records);
+
+        // record last sync time (metadata only needs lastedited; recordIds live in content)
+        const newMeta = { [lastKey]: pageMeta.last_edited_time, recordIds };
+        const buf = Buffer.from(JSON.stringify(newMeta), 'utf8');
+        await rawContainer
+          .getBlockBlobClient(`page-${pid}.json`)
+          .uploadData(buf, { metadata: { lastedited: pageMeta.last_edited_time } });
       }
-
-      const recordIds = records.map(r => r.id);
-
-      const metaClient = rawContainer.getBlockBlobClient(`page-${pid}.json`);
-      let oldIds = [];
-      try {
-        const props = await metaClient.downloadToBuffer();
-        const md = JSON.parse(props.toString());
-        oldIds = md.recordIds || [];
-      } catch {
-        context.log('No previous metadata or no recordIds field → nothing to delete');
-      }
-
-      if (oldIds.length) {
-        await pineIndex.deleteMany(
-        oldIds,                   // <-- array of expired IDs
-        { namespace: 'notion' }      // <-- namespace option
-      );
-      }
-      
-      if (records.length) await pineIndex.namespace('notion').upsert(records);
-
-      // record last sync time (metadata only needs lastedited; recordIds live in content)
-      const newMeta = { [lastKey]: pageMeta.last_edited_time, recordIds };
-      const buf = Buffer.from(JSON.stringify(newMeta), 'utf8');
-      await rawContainer
-        .getBlockBlobClient(`page-${pid}.json`)
-        .uploadData(buf, { metadata: { lastedited: pageMeta.last_edited_time } });
-
       // always clean up attachments afterwards
       await garbageCollectAttachments(pid, pageMeta);
     }
