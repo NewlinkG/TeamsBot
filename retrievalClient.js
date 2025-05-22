@@ -42,7 +42,8 @@ async function retrieveContext(question, topK = 5) {
   return queryRes.matches.map(m => ({
     text:        m.metadata.text || m.metadata.pageId,    // your ingestion uses block text
     sourceTitle: m.metadata.sourceTitle,
-    sourceUrl:   m.metadata.sourceUrl
+    sourceUrl:   m.metadata.sourceUrl,
+    score:       m.score
   }));
 }
 

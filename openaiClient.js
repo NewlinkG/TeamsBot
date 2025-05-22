@@ -117,7 +117,7 @@ async function callAzureOpenAI(input, detectedLanguage = "es", options = {}) {
   const response = await client.chat.completions.create({
     messages,
     max_tokens: 10000,
-    temperature: 0.2,
+    temperature: 0.7,
     top_p: 0.95,
     stream: false
   });
@@ -135,7 +135,7 @@ async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta, op
   // If retrieval was requested, prepend context
   if (options.withRetrieval && typeof input === 'string') {
     const docs = await retrieveContext(input, options.topK || 5);
-    const good = docs.filter(d => d.score > 0.75).slice(0, 5);
+    const good = docs.filter(d => d.score > 0.3).slice(0, options.topK);
     const ctxText = good
       .map((d,i) => `Source [${i+1}]: ${d.sourceTitle} — ${d.sourceUrl}\n${d.text}`)
       .join("\n\n");

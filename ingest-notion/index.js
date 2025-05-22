@@ -266,7 +266,7 @@ module.exports = async function (context, req) {
 
         // upload text & attachments
         const records = [];
-        const CHUNK   = 300;
+        const CHUNK   = 1000;
         for (const blk of blocks) {
           context.log('Processing: ', blk.id, '-', blk.url);
           const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
@@ -338,6 +338,7 @@ module.exports = async function (context, req) {
                 id: `${pid}-${blk.id}-${offset}`,
                 values: emb.data[0].embedding,
                 metadata: {
+                  text: slice, 
                   pageId: pid,
                   blockId: blk.id,
                   blockType: blk.type,
