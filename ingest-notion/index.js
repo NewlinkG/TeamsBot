@@ -312,12 +312,15 @@ module.exports = async function (context, req) {
               // Document Intelligence...
               const blobCli = rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`);
               const sasUrl = await blobCli.generateSasUrl({ expiresOn: new Date(Date.now()+3600e3), permissions: "r" });
-              const analyzeResponse = await diClient.path('/documentModels/{modelId}:analyze','prebuilt-read').post({ contentType:'application/json', body:{ urlSource: sasUrl }});
+              const analyzeResponse = await diClient
+                .path('/documentModels/{modelId}:analyze','prebuilt-read', { queryParameters: { features: 'ocrHighResolution' } })
+                .post({ contentType:'application/json', body:{ urlSource: sasUrl }});
               if (isUnexpected(analyzeResponse)) throw new Error(analyzeResponse.body.error?.message);
               const poller = getLongRunningPoller(diClient, analyzeResponse);
               const diResult = (await poller.pollUntilDone()).body.analyzeResult;
-              if (diResult.content) blockText += diResult.content + '\n';
-              else for (const pg of diResult.pages||[]) for (const ln of pg.lines||[]) blockText += ln.content + '\n';
+              for (const pg of diResult.pages||[])
+                for (const ln of pg.lines||[])
+                  blockText += ln.content + '\n';
             }
             await fs.unlink(tmpPath);
 
