@@ -314,13 +314,11 @@ module.exports = async function (context, req) {
               // Document Intelligence with high-res OCR via the SDK
               const poller = await diClient.beginAnalyzeDocument(
                 "prebuilt-read",
-                { urlSource: sasUrl },                // point at your blob
-                {
-                  contentType: "application/json",   // because body is JSON
-                  features: ["ocrHighResolution"]    // array form ensures the flag is honored
-                }
+                sasUrl, { features: ["ocrHighResolution"] }
               );
+
               const result = await poller.pollUntilDone();
+              
               // ALWAYS walk all pages/lines for the full text
               for (const pg of result.pages || []) {
                 for (const ln of pg.lines || []) {
