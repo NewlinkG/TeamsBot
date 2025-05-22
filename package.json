@@ -13,7 +13,7 @@
     "@azure/ms-rest-js": "^2.4.2",
     "@pinecone-database/pinecone": "^6.0.0",
     "node-fetch": "^2.6.12",
-    "@azure-rest/ai-document-intelligence": "^1.0.0"
+    "@azure/ai-document-intelligence": "^5.0.0"
   },
   "engines": {
     "node": ">=16"
