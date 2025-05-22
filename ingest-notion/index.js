@@ -6,7 +6,9 @@ const { ComputerVisionClient }      = require('@azure/cognitiveservices-computer
 const { ApiKeyCredentials, RestError } = require('@azure/ms-rest-js');
 const { Pinecone }                  = require('@pinecone-database/pinecone');
 const { AzureOpenAI }               = require('openai');
-const { DocumentAnalysisClient, AzureKeyCredential } = require('@azure/ai-document-intelligence');
+const DocumentIntelligenceClient    = require('@azure-rest/ai-document-intelligence').default;
+const { getLongRunningPoller, isUnexpected } = require('@azure-rest/ai-document-intelligence');
+const { AzureKeyCredential }        = require('@azure/core-auth');
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
@@ -58,7 +60,7 @@ module.exports = async function (context, req) {
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
     const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
 
-    const diClient = new DocumentAnalysisClient(DI_ENDPOINT, new AzureKeyCredential(DI_KEY));
+    const diClient = DocumentIntelligenceClient(DI_ENDPOINT, new AzureKeyCredential(DI_KEY));
     const sleep = ms => new Promise(res => setTimeout(res, ms));
 
     function extractTitle(properties = {}) {
@@ -310,29 +312,12 @@ module.exports = async function (context, req) {
               // Document Intelligence...
               const blobCli = rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`);
               const sasUrl = await blobCli.generateSasUrl({ expiresOn: new Date(Date.now()+3600e3), permissions: "r" });
-              
-              // Document Intelligence with high-res OCR via the SDK
-              const poller = await diClient.beginAnalyzeDocument(
-                "prebuilt-read",
-                { urlSource: sasUrl },                // point at your blob
-                {
-                  contentType: "application/json",   // because body is JSON
-                  features: ["ocrHighResolution"]    // array form ensures the flag is honored
-                }
-              );
-              const result = await poller.pollUntilDone();
-
-              console.log(`⚙️  Detected pages: ${result.pages?.length}`);
-              result.pages?.forEach((pg, i) => {
-                console.log(`  • Page ${i+1} has ${pg.lines?.length || 0} lines`);
-              });
-
-              // ALWAYS walk all pages/lines for the full text
-              for (const pg of result.pages || []) {
-                for (const ln of pg.lines || []) {
-                  blockText += ln.content + "\n";
-                }
-              }
+              const analyzeResponse = await diClient.path('/documentModels/{modelId}:analyze','prebuilt-read').post({ contentType:'application/json', body:{ urlSource: sasUrl }});
+              if (isUnexpected(analyzeResponse)) throw new Error(analyzeResponse.body.error?.message);
+              const poller = getLongRunningPoller(diClient, analyzeResponse);
+              const diResult = (await poller.pollUntilDone()).body.analyzeResult;
+              if (diResult.content) blockText += diResult.content + '\n';
+              else for (const pg of diResult.pages||[]) for (const ln of pg.lines||[]) blockText += ln.content + '\n';
             }
             await fs.unlink(tmpPath);
 
