@@ -97,7 +97,7 @@ function buildMessages(input, lang, useClassifier = false) {
 }
 
 // ———————— Non-streaming chat call ————————
-async function callAzureOpenAI(input, detectedLanguage = "es") {
+async function callAzureOpenAI(input, detectedLanguage = "es", options = {}) {
   let messages = buildMessages(input, detectedLanguage, false);
 
   // If retrieval was requested, prepend context
@@ -129,7 +129,7 @@ async function callAzureOpenAI(input, detectedLanguage = "es") {
 /**
  * onDelta will be called for each chunk of text as it arrives.
  */
-async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta) {
+async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta, options = {}) {
   let messages = buildMessages(input, detectedLanguage, false);
 
   // If retrieval was requested, prepend context

@@ -161,7 +161,7 @@ class TeamsBot extends ActivityHandler {
       };
       const userPrompt = { role:'user', content:`Historial:\n${conversationLog}` };
 
-      const raw = await callAzureOpenAI([ systemPrompt, userPrompt ], lang);
+      const raw = await callAzureOpenAI([ systemPrompt, userPrompt ], lang, { withRetrieval: true, topK: 5 });
       let obj;
       try {
         obj = JSON.parse(raw.trim());
@@ -229,7 +229,7 @@ class TeamsBot extends ActivityHandler {
       // fallback to streaming chat
       await context.sendActivity({ type:'typing' });
       let reply = '';
-      await callAzureOpenAIStream(text, lang, chunk => reply += chunk);
+      await callAzureOpenAIStream(text, lang, chunk => reply += chunk, { withRetrieval: true, topK: 5 });
       return await context.sendActivity(reply);
     }
 
@@ -248,7 +248,7 @@ class TeamsBot extends ActivityHandler {
 
       await context.sendActivity({ type:'typing' });
       let firstQ = '';
-      await callAzureOpenAIStream(firstPrompt, lang, delta => firstQ += delta);
+      await callAzureOpenAIStream(firstPrompt, lang, delta => firstQ += delta, { withRetrieval: true, topK: 5 });
 
       draft.history.push({ role:'assistant', content:firstQ });
       await this.draftAccessor.set(context, draft);
