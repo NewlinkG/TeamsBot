@@ -266,7 +266,7 @@ module.exports = async function (context, req) {
 
         // upload text & attachments
         const records = [];
-        const CHUNK   = 1000;
+        const CHUNK   = 300;
         for (const blk of blocks) {
           context.log('Processing: ', blk.id, '-', blk.url);
           const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
