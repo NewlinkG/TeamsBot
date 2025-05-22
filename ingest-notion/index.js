@@ -318,6 +318,12 @@ module.exports = async function (context, req) {
               );
 
               const result = await poller.pollUntilDone();
+
+              // 🚨 DIAGNOSTIC LOGGING 🚨
+              console.log(`⚙️  Detected pages: ${result.pages?.length}`);
+              result.pages?.forEach((pg, i) => {
+                console.log(`  • Page ${i+1} has ${pg.lines?.length || 0} lines`);
+              });
               
               // ALWAYS walk all pages/lines for the full text
               for (const pg of result.pages || []) {
