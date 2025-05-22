@@ -312,7 +312,7 @@ module.exports = async function (context, req) {
               const sasUrl = await blobCli.generateSasUrl({ expiresOn: new Date(Date.now()+3600e3), permissions: "r" });
               
               // Document Intelligence with high-res OCR via the SDK
-              const poller = await diClient.beginAnalyzeDocument(
+              const poller = await diClient.beginAnalyzeDocumentFromUrl(
                 "prebuilt-read",
                 sasUrl, { features: ["ocrHighResolution"] }
               );
