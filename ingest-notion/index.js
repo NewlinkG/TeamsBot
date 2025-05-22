@@ -6,7 +6,7 @@ const { ComputerVisionClient }      = require('@azure/cognitiveservices-computer
 const { ApiKeyCredentials, RestError } = require('@azure/ms-rest-js');
 const { Pinecone }                  = require('@pinecone-database/pinecone');
 const { AzureOpenAI }               = require('openai');
-const { DocumentAnalysisClient, AzureKeyCredential } = require('@azure/ai-form-recognizer');
+const { DocumentAnalysisClient, AzureKeyCredential } = require('@azure/ai-document-intelligence');
 const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
@@ -312,19 +312,21 @@ module.exports = async function (context, req) {
               const sasUrl = await blobCli.generateSasUrl({ expiresOn: new Date(Date.now()+3600e3), permissions: "r" });
               
               // Document Intelligence with high-res OCR via the SDK
-              const poller = await diClient.beginAnalyzeDocumentFromUrl(
+              const poller = await diClient.beginAnalyzeDocument(
                 "prebuilt-read",
-                sasUrl, { features: ["ocrHighResolution"] }
+                { urlSource: sasUrl },                // point at your blob
+                {
+                  contentType: "application/json",   // because body is JSON
+                  features: ["ocrHighResolution"]    // array form ensures the flag is honored
+                }
               );
-
               const result = await poller.pollUntilDone();
 
-              // 🚨 DIAGNOSTIC LOGGING 🚨
               console.log(`⚙️  Detected pages: ${result.pages?.length}`);
               result.pages?.forEach((pg, i) => {
                 console.log(`  • Page ${i+1} has ${pg.lines?.length || 0} lines`);
               });
-              
+
               // ALWAYS walk all pages/lines for the full text
               for (const pg of result.pages || []) {
                 for (const ln of pg.lines || []) {
