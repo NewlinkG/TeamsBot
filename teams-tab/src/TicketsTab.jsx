@@ -13,32 +13,26 @@ export default function TicketsTab() {
         const upn = context.user.userPrincipalName;
         const userEmail = upn.replace(/@.*$/, "@newlink-group.com");
         setEmail(userEmail);
-
-        try {
-          const resp = await axios.get(`/api/tickets?email=${encodeURIComponent(userEmail)}`);
-          setTickets(resp.data || []);
-        } catch (err) {
-          console.error("Failed to load tickets:", err);
-        } finally {
-          setLoading(false);
-        }
+        const res = await axios.get(`/api/tickets?email=${encodeURIComponent(userEmail)}`);
+        setTickets(res.data || []);
+        setLoading(false);
       });
     });
   }, []);
 
-  if (loading) return <div style={{ padding: "1rem" }}>🔄 Loading your tickets...</div>;
+  if (loading) return <p>Loading...</p>;
 
   return (
-    <div style={{ padding: "1rem", fontFamily: "Segoe UI", fontSize: "14px" }}>
-      <h2>🎫 My Support Tickets</h2>
+    <div style={{ padding: "1rem", fontFamily: "Segoe UI" }}>
+      <h2>🎫 My Tickets</h2>
       {tickets.length === 0 ? (
         <p>No tickets found for {email}.</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={{ textAlign: "left" }}>#</th>
-              <th style={{ textAlign: "left" }}>Title</th>
+              <th>ID</th>
+              <th>Title</th>
               <th>Status</th>
               <th>Owner</th>
               <th>Actions</th>
@@ -77,7 +71,10 @@ export default function TicketsTab() {
   function closeTicket(ticketId) {
     if (!window.confirm(`Close ticket #${ticketId}?`)) return;
     axios.post(`/api/tickets/${ticketId}/close`, { email }).then(() => {
-      setTickets(tickets.map(t => t.id === ticketId ? { ...t, state: "closed" } : t));
+      alert("Ticket closed.");
+      setTickets(tickets.map(t =>
+        t.id === ticketId ? { ...t, state: "closed" } : t
+      ));
     });
   }
 }
