@@ -266,13 +266,14 @@ class TeamsBot extends ActivityHandler {
       case 'listTks': {
         const userName  = context.activity.from.name;
         const userEmail = `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
-        console.log('Querying Zammad for:', userEmail);
-        console.log('Returned tickets:', tickets.length);
 
         const pageSize = 5;
         const page = (context.activity.value && context.activity.value.page) || 0;
 
+        console.log('Querying Zammad for:', userEmail);
         const tickets = await listTickets(userEmail);
+
+        console.log('Returned tickets:', tickets.length);
         if (!tickets || tickets.length === 0) {
           return await context.sendActivity("🔍 You have no tickets.");
         }
