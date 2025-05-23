@@ -263,120 +263,17 @@ class TeamsBot extends ActivityHandler {
       }
 
       case 'listTks': {
-        // Redirect to the main pagination flow with initial state
-        return await this.handleMessage({
-          ...context,
-          activity: {
-            ...context.activity,
-            value: {
-              action: 'listTksPage',
-              page: 0,
-              showClosed: false
-            }
-          }
-        }, next);
+        return await this.renderTicketListCard(context, 0, false);
       }
 
 
       case 'listTksPage': {
-        try {
-          const userName = context.activity.from.name;
-          const userEmail = context.activity.from.email
-            || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
-
-          const pageSize = 5;
-          const value = context.activity.value || {};
-          const page = value.page || 0;
-          const showClosed = !!value.showClosed;
-
-
-          const tickets = await listTickets(userEmail);
-          if (!tickets || tickets.length === 0) {
-            return await context.sendActivity("🔍 You have no tickets.");
-          }
-
-          const filtered = showClosed
-            ? tickets
-            : tickets.filter(t => t.state?.toLowerCase() !== 'closed');
-
-          const totalPages = Math.ceil(filtered.length / pageSize);
-          const paginated = filtered.slice(page * pageSize, (page + 1) * pageSize);
-
-          const cardBody = [
-            { type: 'TextBlock', text: '📋 Your Tickets', weight: 'Bolder', size: 'Medium', wrap: true },
-            ...paginated.map(t => {
-              const isClosed = t.state?.toLowerCase() === 'closed';
-
-              return {
-                type: 'Container',
-                style: isClosed ? 'emphasis' : 'default',
-                items: [
-                  {
-                    type: 'ActionSet',
-                    actions: [
-                      {
-                        type: 'Action.OpenUrl',
-                        title: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
-                        url: `${helpdeskWebUrl}/${t.id}`
-                      }
-                    ],
-                    spacing: 'Small'
-                  },
-                  {
-                    type: 'TextBlock',
-                    text: `#${t.id} — ${t.state || 'Open'}`,
-                    spacing: 'None',
-                    isSubtle: true,
-                    wrap: true
-                  }
-                ]
-              };
-            })
-          ];
-
-          const actions = [];
-          if (page > 0) {
-            actions.push({
-              type: 'Action.Submit',
-              title: '⬅️ Previous',
-              data: { action: 'listTksPage', page: page - 1, showClosed }
-            });
-          }
-          if (page < totalPages - 1) {
-            actions.push({
-              type: 'Action.Submit',
-              title: 'Next ➡️',
-              data: { action: 'listTksPage', page: page + 1, showClosed }
-            });
-          }
-          actions.push({
-            type: 'Action.Submit',
-            title: showClosed ? '🙈 Hide Closed' : '👁 Show Closed',
-            data: {
-              action: 'listTksPage',
-              page: 0,
-              showClosed: !showClosed
-            }
-          });
-
-          const card = {
-            type: 'AdaptiveCard',
-            body: cardBody,
-            actions,
-            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-            version: '1.4'
-          };
-
-          return await context.updateActivity({
-            id: context.activity.replyToId,
-            type: 'message',
-            attachments: [CardFactory.adaptiveCard(card)]
-          });
-        } catch (err) {
-            console.error('[bot] error rendering ticket list:', err);
-            return await context.sendActivity('⚠️ Something went wrong displaying your tickets.');
-        }
+        const value = context.activity.value || {};
+        const page = value.page || 0;
+        const showClosed = !!value.showClosed;
+        return await this.renderTicketListCard(context, page, showClosed);
       }
+
 
       case 'editTk': {
         if (info.ticketId) {
@@ -415,6 +312,102 @@ class TeamsBot extends ActivityHandler {
       }
     }
   }
+
+  async renderTicketListCard(context, page = 0, showClosed = false) {
+    const userName = context.activity.from.name;
+    const userEmail = context.activity.from.email
+      || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+
+    const pageSize = 5;
+    const tickets = await listTickets(userEmail);
+    if (!tickets || tickets.length === 0) {
+      return await context.sendActivity("🔍 You have no tickets.");
+    }
+
+    const filtered = showClosed
+      ? tickets
+      : tickets.filter(t => t.state?.toLowerCase() !== 'closed');
+
+    const totalPages = Math.ceil(filtered.length / pageSize);
+    const paginated = filtered.slice(page * pageSize, (page + 1) * pageSize);
+
+    const cardBody = [
+      { type: 'TextBlock', text: '📋 Your Tickets', weight: 'Bolder', size: 'Medium', wrap: true },
+      ...paginated.map(t => {
+        const isClosed = t.state?.toLowerCase() === 'closed';
+        return {
+          type: 'Container',
+          style: isClosed ? 'emphasis' : 'default',
+          items: [
+            {
+              type: 'ActionSet',
+              actions: [
+                {
+                  type: 'Action.OpenUrl',
+                  title: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
+                  url: `${helpdeskWebUrl}/${t.id}`
+                }
+              ],
+              spacing: 'Small'
+            },
+            {
+              type: 'TextBlock',
+              text: `#${t.id} — ${t.state || 'Open'}`,
+              spacing: 'None',
+              isSubtle: true,
+              wrap: true
+            }
+          ]
+        };
+      })
+    ];
+
+    const actions = [];
+    if (page > 0) {
+      actions.push({
+        type: 'Action.Submit',
+        title: '⬅️ Previous',
+        data: { action: 'listTksPage', page: page - 1, showClosed }
+      });
+    }
+    if (page < totalPages - 1) {
+      actions.push({
+        type: 'Action.Submit',
+        title: 'Next ➡️',
+        data: { action: 'listTksPage', page: page + 1, showClosed }
+      });
+    }
+    actions.push({
+      type: 'Action.Submit',
+      title: showClosed ? '🙈 Hide Closed' : '👁 Show Closed',
+      data: {
+        action: 'listTksPage',
+        page: 0,
+        showClosed: !showClosed
+      }
+    });
+
+    const card = {
+      type: 'AdaptiveCard',
+      body: cardBody,
+      actions,
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      version: '1.4'
+    };
+
+    const cardMessage = {
+      type: 'message',
+      attachments: [CardFactory.adaptiveCard(card)]
+    };
+
+    if (context.activity.replyToId) {
+      cardMessage.id = context.activity.replyToId;
+      return await context.updateActivity(cardMessage);
+    } else {
+      return await context.sendActivity(cardMessage);
+    }
+  }
+
 }
 
 module.exports.TeamsBot = TeamsBot;
