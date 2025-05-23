@@ -11,3 +11,68 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+:root {
+  --font-family: "Segoe UI", sans-serif;
+  --font-size: 14px;
+  --color-text: #202124;
+  --color-bg: #ffffff;
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-button-bg: #f3f2f1;
+  --color-button-text: #323130;
+  --color-button-hover: #e1dfdd;
+}
+
+.tab-container {
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  padding: 1rem;
+}
+
+.tab-container table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tab-container th,
+.tab-container td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Theme: dark */
+.tab-container.dark {
+  --color-text: #ffffff;
+  --color-bg: #1b1a1a;
+  --color-border: rgba(255, 255, 255, 0.2);
+  --color-button-bg: #323130;
+  --color-button-text: #ffffff;
+  --color-button-hover: #3b3a39;
+}
+
+/* Theme: contrast */
+.tab-container.contrast {
+  --color-text: #000000;
+  --color-bg: #ffffff;
+  --color-border: #000000;
+  --color-button-bg: #ffff00;
+  --color-button-text: #000;
+  --color-button-hover: #ff0;
+}
+
+/* Buttons (lightweight Fluent style) */
+.tab-container button {
+  background-color: var(--color-button-bg);
+  color: var(--color-button-text);
+  border: none;
+  border-radius: 3px;
+  padding: 0.3rem 0.5rem;
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.tab-container button:hover {
+  background-color: var(--color-button-hover);
+}

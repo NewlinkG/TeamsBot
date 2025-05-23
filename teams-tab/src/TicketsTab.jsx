@@ -6,6 +6,8 @@ export default function TicketsTab() {
   const [email, setEmail] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState("default");
+  const [showClosed, setShowClosed] = useState(false);
 
   useEffect(() => {
     microsoftTeams.app.initialize().then(() => {
@@ -13,9 +15,13 @@ export default function TicketsTab() {
         const upn = context.user.userPrincipalName;
         const userEmail = upn.replace(/@.*$/, "@newlink-group.com");
         setEmail(userEmail);
+        setTheme(context.app?.theme || "default");
         const res = await axios.get(`/api/tickets?email=${encodeURIComponent(userEmail)}`);
         setTickets(res.data || []);
         setLoading(false);
+      });
+      microsoftTeams.app.registerOnThemeChangeHandler((newTheme) => {
+        setTheme(newTheme);
       });
     });
   }, []);
@@ -23,7 +29,7 @@ export default function TicketsTab() {
   if (loading) return <p>Loading...</p>;
 
   return (
-    <div style={{ padding: "1rem", fontFamily: "Segoe UI" }}>
+    <div className={`tab-container ${theme}`} style={{ padding: "1rem", fontFamily: "Segoe UI" }}>
       <h2>🎫 My Tickets</h2>
       {tickets.length === 0 ? (
         <p>No tickets found for {email}.</p>
@@ -39,8 +45,10 @@ export default function TicketsTab() {
             </tr>
           </thead>
           <tbody>
-            {tickets.map((t) => (
-              <tr key={t.id}>
+            {tickets
+                .filter((t) => showClosed || !["closed", "removed"].includes(t.state?.toLowerCase()))
+                .map((t) => (
+              <tr key={t.id} style={{ opacity: t.state?.toLowerCase() === "closed" ? 0.5 : 1 }}>
                 <td>{t.id}</td>
                 <td>{t.title}</td>
                 <td>{t.state}</td>
@@ -57,6 +65,9 @@ export default function TicketsTab() {
           </tbody>
         </table>
       )}
+      <button onClick={() => setShowClosed((s) => !s)}>
+        {showClosed ? "🙈 Hide Closed" : "👁 Show Closed"}
+      </button>
     </div>
   );
 
