@@ -109,7 +109,7 @@ async function callAzureOpenAI(input, detectedLanguage = "es", options = {}) {
     messages.unshift({
       role: "system",
       content:
-        "Use the following Notion references when answering. Cite each source by its number in brackets:\n\n" +
+        "Use the following Notion references when answering. Format your replies to look pretty and understandable. Cite each source by its number in brackets and make it a link to the source:\n\n" +
         ctxText
     });
   }
@@ -142,7 +142,7 @@ async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta, op
     messages.unshift({
       role: "system",
       content:
-        "Use the following Notion references when answering. Cite each source by its number in brackets:\n\n" +
+        "Use the following Notion references when answering. Format your replies to look pretty and understandable. Cite each source by its number in brackets and make it a link to the source:\n\n" +
         ctxText
     });
   }
