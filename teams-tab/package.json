@@ -2,6 +2,7 @@
   "name": "teams-tab",
   "version": "1.0.0",
   "private": true,
+  "homepage": "/api/tabs",
   "dependencies": {
     "@microsoft/teams-js": "^2.37.0",
     "@testing-library/dom": "^10.4.0",
