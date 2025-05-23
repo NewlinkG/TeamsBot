@@ -349,7 +349,6 @@ class TeamsBot extends ActivityHandler {
             return await context.sendActivity("🔍 You have no tickets.");
           }
 
-          const totalPages = Math.ceil(tickets.length / pageSize);
           const filtered = showClosed
             ? tickets
             : tickets.filter(t => t.state?.toLowerCase() !== 'closed');
