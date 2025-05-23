@@ -329,7 +329,7 @@ module.exports = async function (context, req) {
           }
 
           // embeddings
-          const embText = blockText.trim() || (longUrl ? `Media URL: ${longUrl}` : null);
+          const embText = blockText.trim() || (blk.url ? `Media: ${blk.sourceTitle}` : null);
           if (embText) {
             const blobSas = rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`);
             const longUrl = await blobSas.generateSasUrl({ expiresOn: new Date(Date.now() + 3600e3 * 24 * 365), permissions: "r" });
