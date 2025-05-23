@@ -386,23 +386,17 @@ class TeamsBot extends ActivityHandler {
               type: 'ActionSet',
               actions: [
                 {
-                  type: 'ActionSet',
-                  actions: [
-                    {
-                      type: 'Action.OpenUrl',
-                      title: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
-                      url: `${helpdeskWebUrl}/${t.id}`
-                    },
-                    {
-                      type: 'Action.Submit',
-                      title: '✏️',
-                      data: {
-                        action: 'startEditTicket',
-                        ticketId: t.id % 10000
-                      }
-                    }
-                  ],
-                  spacing: 'Small'
+                  type: 'Action.OpenUrl',
+                  title: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
+                  url: `${helpdeskWebUrl}/${t.id}`
+                },
+                {
+                  type: 'Action.Submit',
+                  title: '✏️',
+                  data: {
+                    action: 'startEditTicket',
+                    ticketId: t.id % 10000
+                  }
                 }
               ],
               spacing: 'Small'
