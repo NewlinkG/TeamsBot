@@ -263,72 +263,18 @@ class TeamsBot extends ActivityHandler {
       }
 
       case 'listTks': {
-        const userName  = context.activity.from.name;
-        const userEmail = `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
-
-        const pageSize = 5;
-        const page = (context.activity.value && context.activity.value.page) || 0;
-
-        console.log('Querying Zammad for:', userEmail);
-        const tickets = await listTickets(userEmail);
-
-        console.log('Returned tickets:', tickets.length);
-        if (!tickets || tickets.length === 0) {
-          return await context.sendActivity("🔍 You have no tickets.");
-        }
-
-        const totalPages = Math.ceil(tickets.length / pageSize);
-        const paginated = tickets.slice(page * pageSize, (page + 1) * pageSize);
-
-        const cardBody = [
-          { type: 'TextBlock', text: '📋 Your Tickets', weight: 'Bolder', size: 'Medium', wrap: true },
-          ...paginated.map(t => ({
-            type: 'Container',
-            items: [
-              {
-                type: 'TextBlock',
-                text: `[${t.title}]((${helpdeskWebUrl}/${t.id}))`,
-                weight: 'Bolder',
-                wrap: true
-              },
-              {
-                type: 'TextBlock',
-                text: `#${t.id} — ${t.state || 'Open'}`,
-                spacing: 'None',
-                isSubtle: true,
-                wrap: true
-              }
-            ]
-          }))
-        ];
-
-        const actions = [];
-        if (page > 0) {
-          actions.push({
-            type: 'Action.Submit',
-            title: '⬅️ Previous',
-            data: { action: 'listTksPage', page: page - 1 }
-          });
-        }
-        if (page < totalPages - 1) {
-          actions.push({
-            type: 'Action.Submit',
-            title: 'Next ➡️',
-            data: { action: 'listTksPage', page: page + 1 }
-          });
-        }
-
-        const card = {
-          type: 'AdaptiveCard',
-          body: cardBody,
-          actions,
-          $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-          version: '1.4'
-        };
-
-        return await context.sendActivity({
-          attachments: [CardFactory.adaptiveCard(card)]
-        });
+        // Redirect to the main pagination flow with initial state
+        return await this.handleMessage({
+          ...context,
+          activity: {
+            ...context.activity,
+            value: {
+              action: 'listTksPage',
+              page: 0,
+              showClosed: false
+            }
+          }
+        }, next);
       }
 
 
@@ -382,13 +328,6 @@ class TeamsBot extends ActivityHandler {
                     spacing: 'None',
                     isSubtle: true,
                     wrap: true
-                  },
-                  {
-                    type: 'TextBlock',
-                    text: (t.article?.body || '').substring(0, 100) + '...',
-                    isSubtle: true,
-                    wrap: true,
-                    spacing: 'Small'
                   }
                 ]
               };
