@@ -135,6 +135,17 @@ class TeamsBot extends ActivityHandler {
       return;
     }
 
+    if (value && value.action === 'startEditTicket') {
+      draft = {
+        state: 'editing',
+        ticketId: value.ticketId,
+        history: []
+      };
+      await this.draftAccessor.set(context, draft);
+      return await context.sendActivity(`✏️ What would you like to add to ticket #${value.ticketId}? You can also upload a file or screenshot.`);
+    }
+
+
     // 2) IN-FLIGHT DRAFT (JSON loop)
     if (draft.state === 'awaiting') {
       draft.history.push({ role:'user', content:text });
@@ -223,6 +234,37 @@ class TeamsBot extends ActivityHandler {
       });
     }
 
+    if (draft.state === 'editing') {
+      const comment = text;
+      const ticketId = '10' + draft.ticketId;
+
+      const userName  = context.activity.from.name;
+      const userEmail = context.activity.from.email
+        || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+
+      const teamsFiles = context.activity.attachments || [];
+      const attachmentTokens = [];
+
+      // ✅ FIXED: MicrosoftAppCredentials.getToken() → use new method
+      const tokenProvider = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
+      const token = await tokenProvider.getToken();
+
+      for (const file of teamsFiles) {
+        try {
+          const tokenId = await uploadAttachment(file.contentUrl, file.name, userEmail, token);
+          attachmentTokens.push(tokenId);
+        } catch (err) {
+          console.warn(`Attachment upload failed: ${file.name}`, err.message);
+        }
+      }
+
+      await addCommentToTicket(ticketId, comment, userEmail, attachmentTokens);
+
+      await this.draftAccessor.set(context, { state: 'idle', history: [] });
+      return await context.sendActivity(`✅ Your comment has been added to ticket #${draft.ticketId}.`);
+    }
+
+
     // 3) INTENT CLASSIFICATION
     let info;
     try {
@@ -285,7 +327,8 @@ class TeamsBot extends ActivityHandler {
           const teamsFiles = context.activity.attachments || [];
 
           // 🔐 Get bot token to download Teams file from contentUrl
-          const token = await MicrosoftAppCredentials.getToken();
+          const creds = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
+          const token = await creds.getToken();
 
           for (const file of teamsFiles) {
             try {
@@ -343,9 +386,23 @@ class TeamsBot extends ActivityHandler {
               type: 'ActionSet',
               actions: [
                 {
-                  type: 'Action.OpenUrl',
-                  title: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
-                  url: `${helpdeskWebUrl}/${t.id}`
+                  type: 'ActionSet',
+                  actions: [
+                    {
+                      type: 'Action.OpenUrl',
+                      title: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
+                      url: `${helpdeskWebUrl}/${t.id}`
+                    },
+                    {
+                      type: 'Action.Submit',
+                      title: '✏️',
+                      data: {
+                        action: 'startEditTicket',
+                        ticketId: t.id % 10000
+                      }
+                    }
+                  ],
+                  spacing: 'Small'
                 }
               ],
               spacing: 'Small'
