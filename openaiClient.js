@@ -142,7 +142,9 @@ async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta, op
     messages.unshift({
       role: "system",
       content:
-        "Use the following Notion references when answering. Format your replies to look pretty and understandable. Cite each source by its number in brackets and make it a link to the source:\n\n" +
+        `Use the following Notion references when answering. Format your replies to look pretty and understandable.` +
+        `You may use mediaUrl if present in metadata to insert media or files in the conversation when relevant.` +
+        `Cite each source by its number in brackets and make it a link to the source:\n\n` +
         ctxText
     });
   }
