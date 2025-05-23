@@ -5,7 +5,7 @@ const {
   callAzureOpenAIStream,
   classifySupportRequest
 } = require('./openaiClient');
-const { createTicket, listTickets, addCommentToTicket } = require('./ticketClient');
+const { createTicket, listTickets, addCommentToTicket, uploadAttachment } = require('./ticketClient');
 const { MicrosoftAppCredentials } = require('botframework-connector'); // at the top
 
 
@@ -436,10 +436,8 @@ class TeamsBot extends ActivityHandler {
         } catch (err) {
             console.error('[bot] error rendering ticket list:', err);
             return await context.sendActivity('⚠️ Something went wrong displaying your tickets.');
-          }
         }
       }
-
 
       case 'editTk': {
         if (info.ticketId) {
@@ -469,17 +467,14 @@ class TeamsBot extends ActivityHandler {
       }
 
 
-      default:
-        // fallback to streaming chat if no known intent matched
+      default: {
         await context.sendActivity({ type: 'typing' })
         const prompt = text;
         let reply = '';
         await callAzureOpenAIStream(text, lang, chunk => reply += chunk, { withRetrieval: true, topK: 5 });
         return await context.sendActivity(reply);
+      }
     }
-
-    await this.draftAccessor.set(context, draft);
-    await next();
   }
 }
 
