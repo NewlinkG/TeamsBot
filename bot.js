@@ -403,11 +403,20 @@ class TeamsBot extends ActivityHandler {
             },
             {
               type: 'TextBlock',
-              text: `#${t.id} — ${t.state || 'Open'}`,
+              text: `#10${t.id} — ${t.state || 'Open'}`,
               spacing: 'None',
               isSubtle: true,
               wrap: true
-            }
+            },
+            ...(t.state?.toLowerCase() !== 'new' && t.owner?.firstname ? [
+              {
+                type: 'TextBlock',
+                text: `👨‍🔧: ${t.owner.firstname} ${t.owner.lastname || ''}`,
+                spacing: 'None',
+                isSubtle: true,
+                wrap: true
+              }
+            ] : []),
           ]
         };
       })

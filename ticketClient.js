@@ -56,7 +56,7 @@ async function listTickets(userEmail) {
     From: userEmail
   };
 
-  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search?query=${encodeURIComponent(userEmail)}`;
+  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search?query=${encodeURIComponent(userEmail)}&expand=true`;
   const resp = await axios.get(url, { headers });
   return resp.data;
 }
