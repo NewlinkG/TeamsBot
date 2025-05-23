@@ -71,11 +71,6 @@ class TeamsBot extends ActivityHandler {
 
     // 1) CONFIRM / CANCEL flows
     const value = context.activity.value;
-    if (value && value.action === 'listTksPage') {
-      context.activity.value = { ...value }; // reattach value for pagination
-      info = { intent: 'listTks' }; // manually override intent
-    }
-
     if (value && value.action === 'confirmTicket') {
       const cardLang = value.lang || lang;
       const LC = i18n[cardLang];
@@ -231,7 +226,11 @@ class TeamsBot extends ActivityHandler {
     // 3) INTENT CLASSIFICATION
     let info;
     try {
-      info = await classifySupportRequest(text, lang);
+      if (value && value.action === 'listTksPage') {
+        info = { intent: 'listTksPage' };
+      } else {
+        info = await classifySupportRequest(text, lang);
+      }
     } catch {
       // fallback to streaming chat
       await context.sendActivity({ type:'typing' });
@@ -274,6 +273,74 @@ class TeamsBot extends ActivityHandler {
         const tickets = await listTickets(userEmail);
 
         console.log('Returned tickets:', tickets.length);
+        if (!tickets || tickets.length === 0) {
+          return await context.sendActivity("🔍 You have no tickets.");
+        }
+
+        const totalPages = Math.ceil(tickets.length / pageSize);
+        const paginated = tickets.slice(page * pageSize, (page + 1) * pageSize);
+
+        const cardBody = [
+          { type: 'TextBlock', text: '📋 Your Tickets', weight: 'Bolder', size: 'Medium', wrap: true },
+          ...paginated.map(t => ({
+            type: 'Container',
+            items: [
+              {
+                type: 'TextBlock',
+                text: `[${t.title}]((${helpdeskWebUrl}/${t.id}))`,
+                weight: 'Bolder',
+                wrap: true
+              },
+              {
+                type: 'TextBlock',
+                text: `#${t.id} — ${t.state || 'Open'}`,
+                spacing: 'None',
+                isSubtle: true,
+                wrap: true
+              }
+            ]
+          }))
+        ];
+
+        const actions = [];
+        if (page > 0) {
+          actions.push({
+            type: 'Action.Submit',
+            title: '⬅️ Previous',
+            data: { action: 'listTksPage', page: page - 1 }
+          });
+        }
+        if (page < totalPages - 1) {
+          actions.push({
+            type: 'Action.Submit',
+            title: 'Next ➡️',
+            data: { action: 'listTksPage', page: page + 1 }
+          });
+        }
+
+        const card = {
+          type: 'AdaptiveCard',
+          body: cardBody,
+          actions,
+          $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+          version: '1.4'
+        };
+
+        return await context.sendActivity({
+          attachments: [CardFactory.adaptiveCard(card)]
+        });
+      }
+
+
+      case 'listTksPage': {
+        const userName = context.activity.from.name;
+        const userEmail = context.activity.from.email
+          || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+
+        const pageSize = 5;
+        const page = context.activity.value.page || 0;
+
+        const tickets = await listTickets(userEmail);
         if (!tickets || tickets.length === 0) {
           return await context.sendActivity("🔍 You have no tickets.");
         }
