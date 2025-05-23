@@ -5,7 +5,7 @@ const {
   callAzureOpenAIStream,
   classifySupportRequest
 } = require('./openaiClient');
-const { createTicket, listTickets, addCommentToTicket, uploadAttachment } = require('./ticketClient');
+const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket } = require('./ticketClient');
 const { MicrosoftAppCredentials } = require('botframework-connector'); // at the top
 
 
@@ -143,6 +143,16 @@ class TeamsBot extends ActivityHandler {
       };
       await this.draftAccessor.set(context, draft);
       return await context.sendActivity(`✏️ What would you like to add to ticket #${value.ticketId}? You can also upload a file or screenshot.`);
+    }
+
+    if (value && value.action === 'closeTicket') {
+      const ticketId = value.ticketId;
+      const userName = context.activity.from.name;
+      const userEmail = context.activity.from.email
+        || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+
+      await closeTicket(ticketId, userEmail);
+      return await context.sendActivity(`✅ Ticket #${value.ticketId} has been closed.`);
     }
 
 
@@ -367,6 +377,7 @@ class TeamsBot extends ActivityHandler {
       return await context.sendActivity("🔍 You have no tickets.");
     }
 
+    tickets.sort((a, b) => b.id - a.id);
     const filtered = showClosed
       ? tickets
       : tickets.filter(t => t.state?.toLowerCase() !== 'closed');
@@ -378,28 +389,17 @@ class TeamsBot extends ActivityHandler {
       { type: 'TextBlock', text: '📋 Your Tickets', weight: 'Bolder', size: 'Medium', wrap: true },
       ...paginated.map(t => {
         const isClosed = t.state?.toLowerCase() === 'closed';
+        const isNew = t.state?.toLowerCase() === 'new';
+
         return {
           type: 'Container',
-          style: isClosed ? 'emphasis' : 'default',
+          style: isClosed ? 'attention' : 'default',
           items: [
             {
-              type: 'ActionSet',
-              actions: [
-                {
-                  type: 'Action.OpenUrl',
-                  title: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
-                  url: `${helpdeskWebUrl}/${t.id}`
-                },
-                {
-                  type: 'Action.Submit',
-                  title: '✏️',
-                  data: {
-                    action: 'startEditTicket',
-                    ticketId: t.id % 10000
-                  }
-                }
-              ],
-              spacing: 'Small'
+              type: 'TextBlock',
+              text: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
+              weight: 'Bolder',
+              wrap: true
             },
             {
               type: 'TextBlock',
@@ -408,15 +408,43 @@ class TeamsBot extends ActivityHandler {
               isSubtle: true,
               wrap: true
             },
-            ...(t.state?.toLowerCase() !== 'new' && t.owner?.firstname ? [
-              {
-                type: 'TextBlock',
-                text: `👨‍🔧: ${t.owner.firstname} ${t.owner.lastname || ''}`,
-                spacing: 'None',
-                isSubtle: true,
-                wrap: true
-              }
-            ] : []),
+            {
+              type: 'TextBlock',
+              text: t.owner
+                ? `👨‍🔧 ${t.owner.firstname} ${t.owner.lastname || ''}`
+                : '👨‍🔧 Unassigned',
+              spacing: 'None',
+              isSubtle: true,
+              wrap: true
+            },
+            {
+              type: 'ActionSet',
+              actions: [
+                {
+                  type: 'Action.OpenUrl',
+                  title: '🔗 View in browser',
+                  url: `${helpdeskWebUrl}/${t.id}`
+                },
+                {
+                  type: 'Action.Submit',
+                  title: '✏️ Edit',
+                  data: {
+                    action: 'startEditTicket',
+                    ticketId: t.id
+                  }
+                },
+                ...(!isClosed ? [{
+                  type: 'Action.Submit',
+                  title: '✅ Close',
+                  data: {
+                    action: 'closeTicket',
+                    ticketId: t.id
+                  }
+                }] : [])
+              ],
+              spacing: 'Medium',
+              horizontalAlignment: 'Left'
+            }
           ]
         };
       })

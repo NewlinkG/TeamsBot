@@ -115,11 +115,27 @@ async function addCommentToTicket(ticketId, comment, userEmail, attachments = []
   return resp.data;
 }
 
+async function closeTicket(ticketId, userEmail) {
+  const headers = {
+    Authorization: `Token token=${HELP_DESK_TOKEN}`,
+    'Content-Type': 'application/json',
+    From: userEmail
+  };
+
+  const payload = {
+    state_id: 4 // Adjust depending on your Zammad state mapping
+  };
+
+  const url = `${HELPDESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
+  const resp = await axios.put(url, payload, { headers });
+  return resp.data;
+}
 
 
 module.exports = {
   createTicket,
   listTickets,
   addCommentToTicket,
-  uploadAttachment
+  uploadAttachment,
+  closeTicket
 };
