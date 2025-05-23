@@ -264,7 +264,11 @@ class TeamsBot extends ActivityHandler {
       }
 
       case 'listTks': {
-        const userEmail = context.activity.from.email;
+        const userName  = context.activity.from.name;
+        const userEmail = `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
+        console.log('Querying Zammad for:', userEmail);
+        console.log('Returned tickets:', tickets.length);
+
         const pageSize = 5;
         const page = (context.activity.value && context.activity.value.page) || 0;
 
@@ -328,10 +332,10 @@ class TeamsBot extends ActivityHandler {
       }
 
 
-
       case 'editTk': {
         if (info.ticketId) {
-          const userEmail = context.activity.from.email;
+          const userName  = context.activity.from.name;
+          const userEmail = `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
           const comment = info.comment || text;
 
           let attachmentTokens = [];
