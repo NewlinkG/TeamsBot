@@ -5,7 +5,9 @@ const {
   callAzureOpenAIStream,
   classifySupportRequest
 } = require('./openaiClient');
-const { createTicket } = require('./ticketClient');
+const { createTicket, listTickets, addCommentToTicket } = require('./ticketClient');
+const { MicrosoftAppCredentials } = require('botframework-connector'); // at the top
+
 
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
 if (!helpdeskWebUrl) throw new Error('Missing HELPDESK_WEB_URL env var');
@@ -69,6 +71,11 @@ class TeamsBot extends ActivityHandler {
 
     // 1) CONFIRM / CANCEL flows
     const value = context.activity.value;
+    if (value && value.action === 'listTksPage') {
+      context.activity.value = { ...value }; // reattach value for pagination
+      info = { intent: 'listTks' }; // manually override intent
+    }
+
     if (value && value.action === 'confirmTicket') {
       const cardLang = value.lang || lang;
       const LC = i18n[cardLang];
@@ -150,7 +157,7 @@ class TeamsBot extends ActivityHandler {
         role:'system',
         content:
           `Eres OrbIT, asistente de IA que recopila información para un ticket de soporte. ` +
-          `Respondes siempre en el idioma que te hablan. ` +
+          `Respondes siempre en el mismo idioma en el que habla el usuario en cada mensaje. ` +
           `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
           `Generas el summary hablando en primera persona.` +
           `Usuario: ${userName}, correo: ${userEmail}. ` +
@@ -234,38 +241,129 @@ class TeamsBot extends ActivityHandler {
     }
 
     // 4) KICK-OFF SUPPORT FLOW
-    if (info.isSupport) {
-      draft = { state:'awaiting', history:[] };
-      draft.history.push({ role:'assistant', content:`Resumen inicial: ${info.summary}` });
-      await this.draftAccessor.set(context, draft);
+    switch (info.intent) {
+      case 'createTk': {
+        draft = { state: 'awaiting', history: [] };
+        draft.history.push({ role: 'assistant', content: `Resumen inicial: ${info.summary}` });
+        await this.draftAccessor.set(context, draft);
 
-      const firstPrompt =
-        `Eres OrbIT, recopila info para un ticket de soporte: "${info.summary}". ` +
-        `Respondes siempre en el idioma que te hablan.` +
-        `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si lo pide el usuario.` +
-        `Generas el summary hablando en primera persona.` +
-        `Pregunta solo detalles del problema (no pidas nombre/correo).`;
+        const firstPrompt =
+          `Eres OrbIT, recopila info para un ticket de soporte: "${info.summary}". ` +
+          `Respondes siempre en el mismo idioma en que te habla el usuario.` +
+          `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si te lo piden.` +
+          `Generas el summary hablando en primera persona.` +
+          `Pregunta solo detalles del problema (no pidas nombre/correo).`;
 
-      await context.sendActivity({ type:'typing' });
-      let firstQ = '';
-      await callAzureOpenAIStream(firstPrompt, lang, delta => firstQ += delta, { withRetrieval: true, topK: 5 });
+        await context.sendActivity({ type: 'typing' });
+        let firstQ = '';
+        await callAzureOpenAIStream(firstPrompt, lang, delta => firstQ += delta, { withRetrieval: true, topK: 5 });
 
-      draft.history.push({ role:'assistant', content:firstQ });
-      await this.draftAccessor.set(context, draft);
-      return await context.sendActivity(firstQ);
+        draft.history.push({ role: 'assistant', content: firstQ });
+        await this.draftAccessor.set(context, draft);
+        return await context.sendActivity(firstQ);
+      }
+
+      case 'listTks': {
+        const userEmail = context.activity.from.email;
+        const pageSize = 5;
+        const page = (context.activity.value && context.activity.value.page) || 0;
+
+        const tickets = await listTickets(userEmail);
+        if (!tickets || tickets.length === 0) {
+          return await context.sendActivity("🔍 You have no tickets.");
+        }
+
+        const totalPages = Math.ceil(tickets.length / pageSize);
+        const paginated = tickets.slice(page * pageSize, (page + 1) * pageSize);
+
+        const cardBody = [
+          { type: 'TextBlock', text: '📋 Your Tickets', weight: 'Bolder', size: 'Medium', wrap: true },
+          ...paginated.map(t => ({
+            type: 'Container',
+            items: [
+              {
+                type: 'TextBlock',
+                text: `[${t.title}]((${helpdeskWebUrl}/${t.id}))`,
+                weight: 'Bolder',
+                wrap: true
+              },
+              {
+                type: 'TextBlock',
+                text: `#${t.id} — ${t.state || 'Open'}`,
+                spacing: 'None',
+                isSubtle: true,
+                wrap: true
+              }
+            ]
+          }))
+        ];
+
+        const actions = [];
+        if (page > 0) {
+          actions.push({
+            type: 'Action.Submit',
+            title: '⬅️ Previous',
+            data: { action: 'listTksPage', page: page - 1 }
+          });
+        }
+        if (page < totalPages - 1) {
+          actions.push({
+            type: 'Action.Submit',
+            title: 'Next ➡️',
+            data: { action: 'listTksPage', page: page + 1 }
+          });
+        }
+
+        const card = {
+          type: 'AdaptiveCard',
+          body: cardBody,
+          actions,
+          $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+          version: '1.4'
+        };
+
+        return await context.sendActivity({
+          attachments: [CardFactory.adaptiveCard(card)]
+        });
+      }
+
+
+
+      case 'editTk': {
+        if (info.ticketId) {
+          const userEmail = context.activity.from.email;
+          const comment = info.comment || text;
+
+          let attachmentTokens = [];
+          const teamsFiles = context.activity.attachments || [];
+
+          // 🔐 Get bot token to download Teams file from contentUrl
+          const token = await MicrosoftAppCredentials.getToken();
+
+          for (const file of teamsFiles) {
+            try {
+              const tokenId = await uploadAttachment(file.contentUrl, file.name, userEmail, token);
+              attachmentTokens.push(tokenId);
+            } catch (err) {
+              console.warn(`Attachment upload failed: ${file.name}`, err.message);
+            }
+          }
+
+          await addCommentToTicket(info.ticketId, comment, userEmail, attachmentTokens);
+          return await context.sendActivity(`📝 Comment added to ticket #${info.ticketId}${attachmentTokens.length ? ' with attachments.' : '.'}`);
+        }
+        break;
+      }
+
+
+      default:
+        // fallback to streaming chat if no known intent matched
+        await context.sendActivity({ type: 'typing' })
+        const prompt = text;
+        let reply = '';
+        await callAzureOpenAIStream(text, lang, chunk => reply += chunk, { withRetrieval: true, topK: 5 });
+        return await context.sendActivity(reply);
     }
-
-    // 5) FALLBACK NORMAL CHAT
-    // Try retrieval-augmented generation first
-    await context.sendActivity({ type:'typing' });
-    const prompt = text;
-     // Note: callAzureOpenAI supports streaming too if you adapt it similarly
-     const reply = await callAzureOpenAI(
-      prompt,
-      lang,
-      { withRetrieval: true, topK: 5 }
-    );
-    await context.sendActivity(reply);
 
     await this.draftAccessor.set(context, draft);
     await next();

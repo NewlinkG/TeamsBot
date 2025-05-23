@@ -49,4 +49,77 @@ async function createTicket({ title, description, userName, userEmail }) {
   return resp.data;
 }
 
-module.exports = { createTicket };
+async function listTickets(userEmail) {
+  const headers = {
+    Authorization: `Token token=${HELP_DESK_TOKEN}`,
+    'Content-Type': 'application/json',
+    From: userEmail
+  };
+
+  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search?query=${encodeURIComponent(userEmail)}`;
+  const resp = await axios.get(url, { headers });
+  return resp.data;
+}
+
+const FormData = require('form-data');
+const fs = require('fs');
+const axiosRaw = require('axios'); // raw axios for form upload (if needed)
+
+
+async function uploadAttachment(fileUrl, fileName, userEmail, bearerToken = null) {
+  const headers = bearerToken
+    ? { Authorization: `Bearer ${bearerToken}` }
+    : {};
+
+  const fileResp = await axios.get(fileUrl, {
+    responseType: 'arraybuffer',
+    headers
+  });
+
+  const form = new FormData();
+  form.append('file', fileResp.data, { filename: fileName });
+
+  const uploadHeaders = {
+    Authorization: `Token token=${HELP_DESK_TOKEN}`,
+    ...form.getHeaders(),
+    From: userEmail
+  };
+
+  const resp = await axiosRaw.post(
+    `${HELP_DESK_URL.replace(/\/+$/, '')}/upload`,
+    form,
+    { headers: uploadHeaders }
+  );
+
+  return resp.data.token;
+}
+
+
+async function addCommentToTicket(ticketId, comment, userEmail, attachments = []) {
+  const headers = {
+    Authorization: `Token token=${HELP_DESK_TOKEN}`,
+    'Content-Type': 'application/json',
+    From: userEmail
+  };
+
+  const payload = {
+    article: {
+      body: comment,
+      type: 'note',
+      attachments  // array of upload tokens
+    }
+  };
+
+  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}/articles`;
+  const resp = await axios.post(url, payload, { headers });
+  return resp.data;
+}
+
+
+
+module.exports = {
+  createTicket,
+  listTickets,
+  addCommentToTicket,
+  uploadAttachment
+};

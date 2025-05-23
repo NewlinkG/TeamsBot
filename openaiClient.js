@@ -62,23 +62,64 @@ y puedes crear y gestionar solicitudes de soporte técnico con el departamento d
 
 // ———————— Prompts for the intent classifier ————————
 const CLASSIFIER_PROMPTS = {
-  en: `You are an intent classifier specialized in corporate IT support requests.
-Given a user message, output only a JSON:
-{"isSupport": true|false, "title":"short title", "summary":"brief description"}.
-Only set isSupport=true for valid corporate issues (e.g. office internet, Office365 licenses, workstation failures).
-For out-of-scope or too generic requests, set isSupport=false.`,
-  pt: `Você é um classificador de intenção focado em solicitações de suporte de TI corporativo.
-Dada uma mensagem, responda somente com um JSON:
-{"isSupport": true|false, "title":"título curto", "summary":"descrição breve"}.
-Somente isSupport=true para problemas corporativos válidos
-(ex: internet de escritório, licenças Office365, falhas de estação de trabalho).
-Caso contrário, isSupport=false.`,
-  es: `Eres un clasificador de intención especializado en solicitudes de soporte de TI corporativo.
-Recibe un mensaje de usuario y responde solo un JSON así:
-{"isSupport": true|false, "title":"título corto", "summary":"descripción breve"}.
-Marca isSupport=true solo para problemas corporativos válidos (internet de oficina, licencias Office365, fallas de PC).
-Para solicitudes fuera de este ámbito o demasiado genéricas, isSupport=false.`
-};
+  en: `You are a corporate IT assistant trained to classify user messages into structured intents.
+
+  Respond ONLY with a JSON in this format:
+  {
+    "intent": "createTk" | "listTks" | "editTk" | "none",
+    "title": "...",         // (only for createTk)
+    "summary": "...",       // (only for createTk)
+    "ticketId": 123,        // (only for editTk)
+    "comment": "..."        // (only for editTk, optional)
+  }
+
+  Examples:
+  - If the user wants to open a new support ticket → intent = "createTk"
+  - If the user wants to view or list their tickets → intent = "listTks"
+  - If they want to add a comment or upload to an existing ticket → intent = "editTk"
+  - If it’s unrelated or unclear → intent = "none"
+
+  Don't add extra commentary — just return the JSON.`,
+    
+    es: `Eres un asistente de soporte de TI corporativo entrenado para clasificar mensajes en intenciones estructuradas.
+
+  Responde SOLO con un JSON en este formato:
+  {
+    "intent": "createTk" | "listTks" | "editTk" | "none",
+    "title": "...",         // (solo para createTk)
+    "summary": "...",       // (solo para createTk)
+    "ticketId": 123,        // (solo para editTk)
+    "comment": "..."        // (solo para editTk, opcional)
+  }
+
+  Ejemplos:
+  - Si el usuario quiere abrir un ticket nuevo → intent = "createTk"
+  - Si el usuario quiere ver o listar sus tickets → intent = "listTks"
+  - Si quiere agregar un comentario o archivo a un ticket existente → intent = "editTk"
+  - Si no se entiende o no es relevante → intent = "none"
+
+  No agregues texto adicional — solo responde el JSON.`,
+
+    pt: `Você é um assistente de suporte de TI corporativo treinado para classificar mensagens de usuários em intenções estruturadas.
+
+  Responda SOMENTE com um JSON neste formato:
+  {
+    "intent": "createTk" | "listTks" | "editTk" | "none",
+    "title": "...",         // (somente para createTk)
+    "summary": "...",       // (somente para createTk)
+    "ticketId": 123,        // (somente para editTk)
+    "comment": "..."        // (somente para editTk, opcional)
+  }
+
+  Exemplos:
+  - Se o usuário quer abrir um novo chamado → intent = "createTk"
+  - Se quer visualizar ou listar seus chamados → intent = "listTks"
+  - Se deseja adicionar um comentário ou anexo a um chamado existente → intent = "editTk"
+  - Se for irrelevante ou incompreensível → intent = "none"
+
+  Não inclua explicações — apenas o JSON.`,
+  };
+
 
 // ———————— Helper to build messages array ————————
 function buildMessages(input, lang, useClassifier = false) {
@@ -144,7 +185,7 @@ async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta, op
       content:
         `Use the following Notion references when answering. Format your replies to look pretty and understandable.` +
         `You may use mediaUrl if present in metadata to insert media or files in the conversation when relevant.` +
-        `Cite each source by its number in brackets and make it a link to the source:\n\n` +
+        `Cite each source by its number in brackets and include link to the source:\n\n` +
         ctxText
     });
   }
