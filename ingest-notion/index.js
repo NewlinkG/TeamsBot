@@ -328,8 +328,13 @@ module.exports = async function (context, req) {
               .upload(blockText, Buffer.byteLength(blockText));
           }
 
+          const longUrl = await blobCli.generateSasUrl({
+            expiresOn: new Date(Date.now() + 3600e3 * 24 * 365), 
+            permissions: "r"
+          });
+
           // embeddings
-          const embText = blockText.trim() || (blk.url ? `Media URL: ${blk.url}` : null);
+          const embText = blockText.trim() || (longUrl ? `Media URL: ${longUrl}` : null);
           if (embText) {
             for (let offset=0; offset<embText.length; offset+=CHUNK) {
               const slice = embText.slice(offset, offset+CHUNK);
@@ -342,7 +347,7 @@ module.exports = async function (context, req) {
                   pageId: pid,
                   blockId: blk.id,
                   blockType: blk.type,
-                  originalUrl: blk.url || '',
+                  mediaUrl: longUrl || '',
                   sourceTitle: extractTitle(pageMeta.properties),
                   sourceUrl: `https://www.notion.so/${pid.replace(/-/g,'')}`
                 }

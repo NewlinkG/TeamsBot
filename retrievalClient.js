@@ -43,6 +43,7 @@ async function retrieveContext(question, topK = 5) {
     text:        m.metadata.text || m.metadata.pageId,    // your ingestion uses block text
     sourceTitle: m.metadata.sourceTitle,
     sourceUrl:   m.metadata.sourceUrl,
+    mediaUrl:    m.metadata.mediaUrl,
     score:       m.score
   }));
 }
