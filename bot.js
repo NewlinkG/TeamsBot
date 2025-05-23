@@ -338,7 +338,10 @@ class TeamsBot extends ActivityHandler {
           || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
         const pageSize = 5;
-        const page = context.activity.value.page || 0;
+        const value = context.activity.value || {};
+        const page = value.page || 0;
+        const showClosed = !!value.showClosed;
+
 
         const tickets = await listTickets(userEmail);
         if (!tickets || tickets.length === 0) {
@@ -346,27 +349,49 @@ class TeamsBot extends ActivityHandler {
         }
 
         const totalPages = Math.ceil(tickets.length / pageSize);
-        const paginated = tickets.slice(page * pageSize, (page + 1) * pageSize);
+        const filtered = showClosed
+          ? tickets
+          : tickets.filter(t => t.state?.toLowerCase() !== 'closed');
+
+        const totalPages = Math.ceil(filtered.length / pageSize);
+        const paginated = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
         const cardBody = [
           { type: 'TextBlock', text: '📋 Your Tickets', weight: 'Bolder', size: 'Medium', wrap: true },
           ...paginated.map(t => ({
-            type: 'Container',
-            items: [
-              {
-                type: 'TextBlock',
-                text: `[${t.title}]((${helpdeskWebUrl}/${t.id}))`,
-                weight: 'Bolder',
-                wrap: true
-              },
-              {
-                type: 'TextBlock',
-                text: `#${t.id} — ${t.state || 'Open'}`,
-                spacing: 'None',
-                isSubtle: true,
-                wrap: true
-              }
-            ]
+            const isClosed = t.state?.toLowerCase() === 'closed';
+
+            return {
+              type: 'Container',
+              style: isClosed ? 'emphasis' : 'default',
+              items: [
+                {
+                  type: 'ActionSet',
+                  actions: [
+                    {
+                      type: 'Action.OpenUrl',
+                      title: `${isClosed ? '🚫' : '🔗'} ${t.title}`,
+                      url: `${helpdeskWebUrl}/${t.id}`
+                    }
+                  ],
+                  spacing: 'Small'
+                },
+                {
+                  type: 'TextBlock',
+                  text: `#${t.id} — ${t.state || 'Open'}`,
+                  spacing: 'None',
+                  isSubtle: true,
+                  wrap: true
+                },
+                {
+                  type: 'TextBlock',
+                  text: t.article?.body?.substring(0, 100) + '...',
+                  isSubtle: true,
+                  wrap: true,
+                  spacing: 'Small'
+                }
+              ]
+            };
           }))
         ];
 
@@ -375,16 +400,25 @@ class TeamsBot extends ActivityHandler {
           actions.push({
             type: 'Action.Submit',
             title: '⬅️ Previous',
-            data: { action: 'listTksPage', page: page - 1 }
+            data: { action: 'listTksPage', page: page - 1, showClosed }
           });
         }
         if (page < totalPages - 1) {
           actions.push({
             type: 'Action.Submit',
             title: 'Next ➡️',
-            data: { action: 'listTksPage', page: page + 1 }
+            data: { action: 'listTksPage', page: page + 1, showClosed }
           });
         }
+        actions.push({
+          type: 'Action.Submit',
+          title: showClosed ? '🙈 Hide Closed' : '👁 Show Closed',
+          data: {
+            action: 'listTksPage',
+            page: 0,
+            showClosed: !showClosed
+          }
+        });
 
         const card = {
           type: 'AdaptiveCard',
@@ -394,7 +428,9 @@ class TeamsBot extends ActivityHandler {
           version: '1.4'
         };
 
-        return await context.sendActivity({
+        return await context.updateActivity({
+          id: context.activity.replyToId,
+          type: 'message',
           attachments: [CardFactory.adaptiveCard(card)]
         });
       }
