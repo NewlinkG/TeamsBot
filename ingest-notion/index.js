@@ -328,14 +328,11 @@ module.exports = async function (context, req) {
               .upload(blockText, Buffer.byteLength(blockText));
           }
 
-          const longUrl = await blobCli.generateSasUrl({
-            expiresOn: new Date(Date.now() + 3600e3 * 24 * 365), 
-            permissions: "r"
-          });
-
           // embeddings
           const embText = blockText.trim() || (longUrl ? `Media URL: ${longUrl}` : null);
           if (embText) {
+            const blobSas = rawContainer.getBlockBlobClient(`${blk.type}-${pid}-${blk.id}-${filename}`);
+            const longUrl = await blobSas.generateSasUrl({ expiresOn: new Date(Date.now() + 3600e3 * 24 * 365), permissions: "r" });
             for (let offset=0; offset<embText.length; offset+=CHUNK) {
               const slice = embText.slice(offset, offset+CHUNK);
               const emb = await openai.embeddings.create({ model: OPENAI_EMBED_MODEL, input: slice });
