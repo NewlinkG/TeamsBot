@@ -167,11 +167,15 @@ async function addCommentToTicket(ticketId, comment, userEmail, attachments = []
     article: {
       body: comment,
       type: 'note',
-      attachments  // array of upload tokens
     }
   };
 
+  if (attachments && attachments.length > 0) {
+    payload.article.attachments = attachments;
+  }
+
   const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}/articles`;
+  console.log('Posting comment to Zammad:', ticketId, JSON.stringify(payload, null, 2));
   const resp = await axios.post(url, payload, { headers });
   return resp.data;
 }
