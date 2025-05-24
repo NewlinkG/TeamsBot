@@ -12,7 +12,7 @@ module.exports = async function (context, req) {
   const rawBody = JSON.stringify(req.body);
 
   // ✅ Signature verification
-  const signatureHeader = req.headers['x-zammad-signature'];
+  const signatureHeader = req.headers['x-hub-signature'];
   if (!signatureHeader || !signatureHeader.startsWith('sha1=')) {
     context.log.warn('⛔ Missing or invalid signature header.');
     context.res = { status: 401, body: 'Unauthorized' };
