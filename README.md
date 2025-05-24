@@ -1,6 +1,6 @@
-# 🤖 OrbIT Bot para Microsoft Teams — Documentación Técnica Extendida
+# 🤖 OrbIT Bot para Microsoft Teams — Documentación Técnica Completa
 
-OrbIT es un asistente virtual empresarial desarrollado por **Newlink** para gestionar soporte técnico, automatización de tickets y consultas mediante inteligencia artificial dentro de Microsoft Teams. Este bot integra múltiples servicios: Helpdesk, OpenAI, Notion y Pinecone.
+OrbIT es un bot corporativo desarrollado por **Newlink** que centraliza la gestión de soporte técnico, documentación y automatización interna directamente desde **Microsoft Teams**, combinando inteligencia artificial, integración con sistemas de tickets y una interfaz de usuario personalizada mediante un **tab React**.
 
 ---
 
@@ -8,93 +8,86 @@ OrbIT es un asistente virtual empresarial desarrollado por **Newlink** para gest
 
 ```
 TeamsBot/
-├── bot.js                  # Orquestador principal (handler de Teams)
-├── openaiClient.js         # Cliente para Azure OpenAI (GPT)
-├── retrievalClient.js      # Búsqueda semántica (embeddings)
-├── ticketClient.js         # API de Helpdesk interna
-├── ingest-notion/          # Indexación de artículos desde Notion
-├── api-messages/           # API HTTP para entrada de mensajes
-├── api-tabs/               # API para pestaña personalizada (Teams Tab)
-├── api-tickets/            # API REST pública para tickets
-├── tabs-portal/            # UI React (pestaña embebida en Teams)
-├── teams-tab/              # Configuración para renderizado de pestaña
-├── .env                    # Variables sensibles
-├── package.json            # Dependencias
+├── bot.js                  # Entrada principal del bot de Teams
+├── openaiClient.js         # Cliente de GPT (Azure OpenAI)
+├── retrievalClient.js      # Búsqueda semántica sobre documentación indexada
+├── ticketClient.js         # Cliente REST para Helpdesk interno
+├── api-messages/           # API para procesamiento de mensajes entrantes
+├── api-tabs/               # API del tab personalizado de Teams
+├── api-tickets/            # API pública RESTful para manejar tickets
+├── ingest-notion/          # Proceso de indexación periódica de contenido Notion
+├── tabs-portal/            # App React embebida como pestaña (tab)
+├── teams-tab/              # Configuración de Teams para servir el tab
+├── package.json            # Configuración del entorno y dependencias
+└── .env                    # Variables sensibles y tokens
 ```
 
 ---
 
 ## 🚀 Funcionalidades Clave
 
-### ✍️ Soporte Técnico Multicanal
-- Crear, editar, cerrar y listar tickets desde Teams
-- Confirmaciones de usuario vía Adaptive Cards
-- Soporte multilingüe (es, pt, en)
+### 🧠 IA y Automatización
+- Respuesta automática a preguntas técnicas y operativas (OpenAI GPT-4o)
+- Análisis semántico con fallback a embeddings (documentos internos)
 
-### 🧠 Inteligencia Artificial
-- Clasificación de intención (`classifySupportRequest()`)
-- Prompting dinámico en flujos de soporte
-- Streaming GPT-4o como fallback para respuestas abiertas
+### 🎫 Integración con Helpdesk
+- Crear, consultar y escalar tickets desde Microsoft Teams
+- Autenticación integrada con Azure AD
+- Conexión segura a plataforma Helpdesk de Newlink
 
-### 🔗 Integraciones
-- **Helpdesk API**: soporte completo de tickets
-- **Azure OpenAI**: generación contextual y fluida
-- **Notion**: indexación periódica de artículos
-- **Pinecone**: recuperación semántica
+### 📚 Indexación desde Notion (`ingest-notion/`)
+- Se conecta a la API oficial de Notion con un token seguro
+- Extrae artículos, documentos, procedimientos técnicos
+- Los transforma a chunks y los indexa en Pinecone para búsquedas vectoriales
 
-### 📎 Archivos y Comentarios
-- Subida de adjuntos en edición de ticket
-- Soporte para imágenes embebidas (HTML)
-- Descarga autenticada vía token de MicrosoftAppCredentials
+### 🌐 APIs HTTP (Triggers)
+- `/api/messages`: punto de entrada principal del bot
+- `/api/tickets`: operaciones de alta/baja/consulta de tickets
+- `/api/tabs`: contenido dinámico del tab
+- `/api/keepalive`: para ping de disponibilidad
 
----
-
-## 🧾 Endpoints HTTP (Triggers)
-
-| Ruta                  | Descripción                             |
-|-----------------------|------------------------------------------|
-| `/api/messages`       | Entrada principal del bot (Teams)        |
-| `/api/tickets`        | API REST para consultar/crear tickets    |
-| `/api/tabs`           | Contenido dinámico para Teams Tab        |
-| `/api/keepalive`      | Ping para mantener bot despierto         |
+### 🧾 Tab Personalizado (React)
+- Formulario interactivo para crear tickets
+- Listado de solicitudes abiertas
+- Artículos sugeridos dinámicamente
 
 ---
 
-## 📌 Funciones Auxiliares Importantes
+## ⚙️ Instalación Paso a Paso
 
-### `extractInlineImagesFromHtml(html, token, userEmail)`
-- Extrae `<img src="...">` de contenido HTML
-- Descarga las imágenes usando token de acceso
-- Las convierte en `buffer` y las sube como adjuntos
-- Retorna un arreglo de `attachmentTokenId[]`
+### Requisitos
+- Node.js ≥ 18.17.0
+- Cuenta de Azure y App Registration
+- API Keys: Notion, Azure OpenAI, Pinecone
 
-```js
-const imgRes = await axios.get(imageUrl, {
-  responseType: 'arraybuffer',
-  headers: { Authorization: `Bearer ${token}` }
-});
+### Back-end
+
+```bash
+git clone https://github.com/NewlinkG/TeamsBot.git
+cd TeamsBot
+npm install
 ```
 
-### `renderTicketListCard(context, page, showClosed)`
-- Renderiza lista paginada de tickets como AdaptiveCard
-- Incluye acciones: ver, editar, cerrar
+### Front-end del Tab
+
+```bash
+npx create-react-app teams-tab
+cd tabs-portal
+npm install @microsoft/teams-js axios
+npm run build
+xcopy.exe .\build\* ..\teams-tab\ /S
+```
 
 ---
 
-## 🔧 Variables de Entorno Relevantes
+## 🔧 Variables de Entorno Importantes
 
-```env
-MicrosoftAppId=
-MicrosoftAppPassword=
-HELPDESK_API_URL=
-HELPDESK_API_KEY=
-HELPDESK_WEB_URL=
-OPENAI_KEY=
-AZURE_OPENAI_ENDPOINT=
-PINECONE_API_KEY=
-NOTION_TOKEN=
-...
-```
+Archivo `.env` en la raíz (ver contenido completo en documento previo). Variables clave incluyen:
+
+- `MicrosoftAppId`, `MicrosoftAppPassword`
+- `HELPDESK_API_URL`, `HELPDESK_API_KEY`
+- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`
+- `NOTION_TOKEN`, `PINECONE_API_KEY`
 
 ---
 
@@ -103,58 +96,83 @@ NOTION_TOKEN=
 ```mermaid
 flowchart TD
   A[Usuario en Teams] --> B[API /api/messages]
-  B --> C{¿Comando válido?}
-  C -- Sí --> D[Procesar ticket (crear, cerrar, listar)]
-  C -- No --> E[Llamar a GPT via openaiClient.js]
-  E --> F{¿Respuesta válida?}
-  F -- No --> G[Buscar artículos con retrievalClient (Pinecone)]
-  G --> H[Responder con sugerencia de artículo]
-  F -- Sí --> H
-  D --> H
+  B --> C{¿Es un comando?}
+  C -- Sí --> D[Procesar en ticketClient.js]
+  D --> D1{Crear o Consultar}
+  D1 -- Crear --> D2[POST a Helpdesk API]
+  D1 -- Consultar --> D3[GET a Helpdesk API]
+  D2 --> X[Respuesta al usuario]
+  D3 --> X
+
+  C -- No --> E[Consulta a openaiClient.js]
+  E --> F{¿Respuesta confiable?}
+  F -- Sí --> G[Responder con texto generado]
+  F -- No --> H[Buscar embeddings en Pinecone]
+  H --> I[Responder con artículo Notion relevante]
+  G --> X
+  I --> X
 
   subgraph Indexación Notion
-    I[ingest-notion] --> J[Llama a Notion API]
-    J --> K[Fragmenta y vectoriza]
-    K --> L[Indexa en Pinecone]
+    J[ingest-notion/index.js] --> K[Llama API Notion]
+    K --> L[Fragmentar y vectorizar]
+    L --> M[Indexar en Pinecone]
   end
+
+  B --> Z[Guardar log en Application Insights]
 ```
 
 ---
 
-## 📦 Dependencias Clave
+## 🧩 Descripción de Componentes Técnicos
 
-```json
-"dependencies": {
-  "express": "^4.18.2",
-  "axios": "^1.6.7",
-  "botbuilder": "^4.21.0",
-  "dotenv": "^16.3.1",
-  "openai": "^4.30.0",
-  "notion-client": "^1.2.0"
-}
-```
+### `bot.js`
+- Extiende `TeamsActivityHandler`
+- Orquestra el enrutamiento de mensajes hacia los módulos internos
+
+### `openaiClient.js`
+- Usa GPT-4o de Azure para generación de texto
+- Considera contexto e historial por usuario
+
+### `retrievalClient.js`
+- Ejecuta embedding y búsqueda vectorial
+- Requiere Pinecone o similar
+
+### `ticketClient.js`
+- CRUD de tickets con Helpdesk
+- Encapsula autenticación, errores y validación
+
+### `ingest-notion/`
+- Correr como cronjob
+- Indexa nuevos artículos, detecta cambios y los sincroniza
+
+### `api-messages/`, `api-tabs/`, `api-tickets/`
+- HTTP triggers (Azure / Express)
+- Sirven como puntos de entrada RESTful al sistema
+
+### `tabs-portal/`
+- React app con Vite
+- Diseño responsivo integrado a Teams
+- Utiliza Azure Storage para hosting estático
 
 ---
 
-## ✅ Mejores Prácticas Implementadas
+## ✅ Buenas Prácticas y Seguridad
 
-- `conversationState` para control de flujos de conversación
-- Confirmaciones visuales con Adaptive Cards
-- Subida de adjuntos con autenticación segura
-- Logs en consola para errores de carga de archivos
+- Tokens y secretos solo en `.env`
+- Logs en Application Insights
+- Validación de entradas y sanitización de prompt
+- OAuth2 recomendado para extensiones futuras
 
 ---
 
-## 🧪 Pruebas y CI/CD
+## 🛠️ CI/CD Sugerido
 
-- Soporte para `jest` y `supertest` sugerido
-- GitHub Actions recomendado para:
-  - Test
-  - Linter
-  - Despliegue automático a Azure Web App
+- GitHub Actions para testing + deploy
+- Envío a Azure Web App (bot + APIs)
+- `tabs-portal/` build + upload a Azure Storage Blob
 
 ---
 
 ## 📬 Soporte
 
-Para soporte técnico o contribuciones, escribe a [help@newlink-group.com](mailto:help@newlink-group.com)
+Para soporte técnico: [help@newlink-group.com](mailto:help@newlink-group.com)
