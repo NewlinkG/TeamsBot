@@ -138,44 +138,17 @@ async function uploadAttachment(file, userEmail) {
   };
 
   const res = await axios.post(`${HELP_DESK_URL}/uploads`, form, { headers });
+  console.log("✅ Upload result:", res.data);
   return res.data[0]?.token;
 }
 
 
-async function addCommentToTicket(ticketId, comment, userEmail, teamsAttachments = []) {
+async function addCommentToTicket(ticketId, comment, userEmail, attachmentTokens = []) {
   const headers = {
     Authorization: `Token token=${HELP_DESK_TOKEN}`,
     'Content-Type': 'application/json',
     From: userEmail
   };
-
-  const uploadedTokens = [];
-
-  for (const att of teamsAttachments) {
-    try {
-      if (
-        att.contentType === 'application/vnd.microsoft.teams.file.download.info' &&
-        att.content?.downloadUrl
-      ) {
-        const fileRes = await axios.get(att.content.downloadUrl, {
-          responseType: 'arraybuffer'
-        });
-
-        const buffer = Buffer.from(fileRes.data);
-        const token = await uploadAttachment(
-          {
-            buffer,
-            originalname: att.name || 'attachment'
-          },
-          userEmail
-        );
-
-        if (token) uploadedTokens.push(token);
-      }
-    } catch (err) {
-      console.error(`❌ Attachment upload failed: ${att.name}`, err.message);
-    }
-  }
 
   const payload = {
     state: "open",
@@ -186,15 +159,17 @@ async function addCommentToTicket(ticketId, comment, userEmail, teamsAttachments
     }
   };
 
-  if (uploadedTokens.length > 0) {
-    payload.article.attachments = uploadedTokens;
+  if (attachmentTokens.length > 0) {
+    payload.article.attachments = attachmentTokens;
   }
 
   const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
+  console.log('📎 Tokens:', attachmentTokens);
   console.log('Posting comment to Zammad:', ticketId, JSON.stringify(payload, null, 2));
   const resp = await axios.put(url, payload, { headers });
   return resp.data;
 }
+
 
 async function closeTicket(ticketId, userEmail) {
   const headers = {
