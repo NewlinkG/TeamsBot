@@ -51,6 +51,10 @@ async function sendProactiveTeamsMessage(userEmail, messageText) {
   const aadId = await getAadObjectId(userEmail);
   const userId = `8:orgid:${aadId}`;
 
+  console.log('📧 Email:', userEmail);
+  console.log('🆔 AAD ID:', aadId);
+  console.log('🧬 Constructed userId:', userId);
+
   let conversation;
     try {
     conversation = await connector.conversations.createConversation({
