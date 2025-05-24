@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { sendProactiveTeamsMessage } = require('../proactiveHelper');
 const { formatTicketUpdate } = require('../formatTicketUpdate');
+const { sendGraphTeamsMessage } = require('./sendGraphTeamsMessage');
 
 /**
  * Azure Function entry point
@@ -57,7 +58,7 @@ module.exports = async function (context, req) {
   const recipientEmail = ticket.customer.email; // or `created_by`, depending on your Zammad config
 
   if (recipientEmail) {
-    await sendProactiveTeamsMessage(recipientEmail, message);
+    await sendGraphTeamsMessage(recipientEmail, '🔔 Your ticket has been updated.');
     context.log(`✅ Message sent to ${recipientEmail}`);
   } else {
     context.log.warn("⚠️ No recipient email found");
