@@ -16,7 +16,7 @@ export default function TicketsTab() {
         const userEmail = upn.replace(/@.*$/, "@newlink-group.com");
         setEmail(userEmail);
         setTheme(context.app?.theme || "default");
-        const res = await axios.get(`/api/tickets?email=${encodeURIComponent(userEmail)}`);
+        const res = await axios.get(`/api/tickets?email=${encodeURIComponent(userEmail)}&openOnly=${!showClosed}`);
         setTickets(res.data || []);
         setLoading(false);
       });
@@ -45,9 +45,7 @@ export default function TicketsTab() {
             </tr>
           </thead>
           <tbody>
-            {tickets
-                .filter((t) => showClosed || !["closed", "removed"].includes(t.state?.toLowerCase()))
-                .map((t) => (
+            {tickets.map((t) => (
               <tr key={t.id} style={{ opacity: t.state?.toLowerCase() === "closed" ? 0.5 : 1 }}>
                 <td>{t.id}</td>
                 <td>{t.title}</td>

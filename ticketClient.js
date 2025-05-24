@@ -1,5 +1,8 @@
 // ticketClient.js
 const axios = require('axios');
+const FormData = require('form-data');
+const fs = require('fs');
+const axiosRaw = require('axios'); // raw axios for form upload (if needed)
 require('dotenv').config();
 
 const HELP_DESK_URL      = process.env.HELPDESK_API_URL;
@@ -49,21 +52,35 @@ async function createTicket({ title, description, userName, userEmail }) {
   return resp.data;
 }
 
-async function listTickets(userEmail) {
+async function listTickets(email, { openOnly = true } = {}) {
   const headers = {
     Authorization: `Token token=${HELP_DESK_TOKEN}`,
     'Content-Type': 'application/json',
-    From: userEmail
+    From: email
   };
 
-  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search?query=${encodeURIComponent(userEmail)}&expand=true`;
-  const resp = await axios.get(url, { headers });
-  return resp.data;
-}
+  const baseUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/tickets/search`;
 
-const FormData = require('form-data');
-const fs = require('fs');
-const axiosRaw = require('axios'); // raw axios for form upload (if needed)
+  const query = openOnly
+    ? `${email} state:(new OR open)`
+    : `${email}`; // will bring back everything
+
+  let page = 1;
+  let allTickets = [];
+  let hasMore = true;
+
+  while (hasMore) {
+    const url = `${baseUrl}?query=${encodeURIComponent(query)}&expand=true&page=${page}`;
+    const res = await axios.get(url, { headers });
+    const batch = res.data || [];
+    allTickets = allTickets.concat(batch);
+    hasMore = batch.length > 0;
+    page++;
+    if (openOnly) break; // ⛔ do not paginate unless pulling everything
+  }
+
+  return allTickets;
+}
 
 
 async function uploadAttachment(fileUrl, fileName, userEmail, bearerToken = null) {

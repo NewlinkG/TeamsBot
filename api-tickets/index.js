@@ -5,6 +5,7 @@ module.exports = async function (context, req) {
   const method = req.method.toLowerCase();
   const creds = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
   const token = await creds.getToken();
+  const openOnly = req.query.openOnly !== 'false';
 
   if (method === 'get') {
     const email = req.query.email;
@@ -14,7 +15,7 @@ module.exports = async function (context, req) {
     }
 
     try {
-      const tickets = await listTickets(email);
+      const tickets = await listTickets(email, { openOnly });
       context.res = { status: 200, body: tickets };
     } catch (err) {
       context.log.error('Error listing tickets:', err);
