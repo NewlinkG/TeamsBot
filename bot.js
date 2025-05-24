@@ -260,6 +260,10 @@ class TeamsBot extends ActivityHandler {
         || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
       const teamsFiles = context.activity.attachments || [];
+      if (teamsFiles.length === 0) {
+        await context.sendActivity("⚠️ No attachments found in your message.");
+        return;
+      }
       const attachmentTokens = [];
 
       // ✅ FIXED: MicrosoftAppCredentials.getToken() → use new method
@@ -267,7 +271,12 @@ class TeamsBot extends ActivityHandler {
       const token = await tokenProvider.getToken();
 
       for (const file of teamsFiles) {
+        if (!file.contentUrl) {
+          console.warn("Attachment has no contentUrl:", file);
+          continue;
+        }
         try {
+          console.log("📎 Trying to download:", file.name, file.contentUrl);
           const fileRes = await axios.get(file.contentUrl, {
             responseType: 'arraybuffer',
             headers: {
@@ -363,6 +372,7 @@ class TeamsBot extends ActivityHandler {
 
           for (const file of teamsFiles) {
             try {
+              console.log("📎 Trying to download:", file.name, file.contentUrl);
               const fileRes = await axios.get(file.contentUrl, {
                 responseType: 'arraybuffer',
                 headers: {
