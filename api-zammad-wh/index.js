@@ -58,11 +58,17 @@ module.exports = async function (context, req) {
   const recipientEmail = ticket.customer.email; // or `created_by`, depending on your Zammad config
 
   if (recipientEmail) {
-    await sendGraphTeamsMessage(recipientEmail, '🔔 Your ticket has been updated.');
-    context.log(`✅ Message sent to ${recipientEmail}`);
-  } else {
+    try {
+        await sendGraphTeamsMessage(recipientEmail, '🔔 Your ticket has been updated.');
+        context.log(`✅ Message sent to ${recipientEmail}`);
+    } catch (error) {
+        context.log.error(`❌ Failed to send Teams message to ${recipientEmail}:`, error.message);
+        context.res = { status: 500, body: `Failed to notify user: ${error.message}` };
+        return;
+    }
+    } else {
     context.log.warn("⚠️ No recipient email found");
-  }
+    }
 
   // 🔔 Send this message (e.g., to Teams, email, queue, etc.)
   context.log('✅ Notificación preparada:\n', message);

@@ -16,7 +16,8 @@
     "node-fetch": "^2.6.12",
     "@azure-rest/ai-document-intelligence": "^1.0.0",
     "@microsoft/microsoft-graph-client": "^3.0.4",
-    "isomorphic-fetch": "^3.0.0"
+    "isomorphic-fetch": "^3.0.0",
+    "@azure/msal-node": "^2.7.0"
   },
   "engines": {
     "node": ">=16"
