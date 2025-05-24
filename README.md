@@ -68,7 +68,7 @@ cd TeamsBot
 npm install
 ```
 
-### Front-end del Tab
+### Front-end Tab
 
 ```bash
 npx create-react-app teams-tab

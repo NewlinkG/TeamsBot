@@ -3,7 +3,8 @@
   "version": "1.1.0",
   "description": "Operational Response Bot – Incident Tracking & IT",
   "dependencies": {
-    "botbuilder": "^4.20.0",
+    "botbuilder": "^4.23.2",
+    "botframework-connector": "^4.23.2",
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
     "openai": "^4.96.2",
@@ -13,7 +14,9 @@
     "@azure/ms-rest-js": "^2.4.2",
     "@pinecone-database/pinecone": "^6.0.0",
     "node-fetch": "^2.6.12",
-    "@azure-rest/ai-document-intelligence": "^1.0.0"
+    "@azure-rest/ai-document-intelligence": "^1.0.0",
+    "@microsoft/microsoft-graph-client": "^3.0.4",
+    "isomorphic-fetch": "^3.0.0"
   },
   "engines": {
     "node": ">=16"
