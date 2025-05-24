@@ -48,15 +48,21 @@ async function sendProactiveTeamsMessage(userEmail, messageText) {
   const credentials = new MicrosoftAppCredentials(appId, appPassword);
   const connector = new ConnectorClient(credentials, { baseUri: 'https://smba.trafficmanager.net/amer/' });
 
-  const aadId = await getAadObjectId(userEmail, credentials);
+  const aadId = await getAadObjectId(userEmail);
   const userId = `8:orgid:${aadId}`;
 
-  const conversation = await connector.conversations.createConversation({
-    isGroup: false,
-    bot: { id: appId, name: 'OrbIT' },
-    members: [{ id: userId }],
-    channelData: { tenant: { id: tenantId } }
-  });
+  let conversation;
+    try {
+    conversation = await connector.conversations.createConversation({
+        isGroup: false,
+        bot: { id: appId, name: 'OrbIT' },
+        members: [{ id: userId }],
+        channelData: { tenant: { id: tenantId } }
+    });
+    } catch (error) {
+    console.error('❌ Failed to create conversation:', error.message);
+    throw error;
+    }
 
   const activity = {
     type: 'message',

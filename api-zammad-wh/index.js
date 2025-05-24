@@ -25,7 +25,7 @@ module.exports = async function (context, req) {
     .update(rawBody)
     .digest('hex');
 
-  context.log('🔍 Signature header:', signatureHeader);
+  context.log('🔍 Signature header:', signatureValue);
   context.log('🔍 Computed HMAC:', expectedHmac);
 
   if (!crypto.timingSafeEqual(Buffer.from(signatureValue), Buffer.from(expectedHmac))) {
