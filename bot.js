@@ -151,7 +151,7 @@ class TeamsBot extends ActivityHandler {
       const userEmail = context.activity.from.email
         || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
-      await closeTicket(ticketId, userEmail);
+      await closeTicket(ticketId, userEmail, cardLang);
       return await context.sendActivity(`✅ Ticket #${value.ticketId} has been closed.`);
     }
 
