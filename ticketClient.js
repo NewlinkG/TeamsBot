@@ -79,6 +79,29 @@ async function listTickets(email, { openOnly = true } = {}) {
     if (openOnly) break; // ⛔ do not paginate unless pulling everything
   }
 
+  const uniqueOwnerIds = [...new Set(allTickets.map(t => t.owner_id).filter(Boolean))];
+
+  let owners = {};
+  if (uniqueOwnerIds.length > 0) {
+    const idsQuery = uniqueOwnerIds.map(id => `ids[]=${id}`).join('&');
+    const usersUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/users/show_many?${idsQuery}`;
+    const userResp = await axios.get(usersUrl, { headers });
+    const userList = userResp.data || [];
+
+    // Create a mapping: { 3: { firstname, lastname }, ... }
+    for (const u of userList) {
+      owners[u.id] = {
+        firstname: u.firstname,
+        lastname: u.lastname
+      };
+    }
+  }
+
+  // Attach full owner info to each ticket
+  for (const t of allTickets) {
+    t.owner = owners[t.owner_id] || null;
+  }
+
   return allTickets;
 }
 
