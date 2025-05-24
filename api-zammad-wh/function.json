@@ -5,13 +5,15 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": [ "post" ],
-      "route": "zammad-wh"
+      "route": "zammad-wh",
+      "methods": ["post"]
     },
     {
       "type": "http",
       "direction": "out",
       "name": "res"
     }
-  ]
+  ],
+  "scriptFile": "index.js",
+  "rawBody": true
 }

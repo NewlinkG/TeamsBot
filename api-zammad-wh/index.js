@@ -9,7 +9,7 @@ module.exports = async function (context, req) {
   const SHARED_SECRET = process.env.HELPDESK_WEBHOOK_SECRET; // define en App Settings
 
   // 🧾 Raw body as string
-  const rawBody = JSON.stringify(req.body);
+  const rawBody = req.rawBody;
 
   // ✅ Signature verification
   const signatureHeader = req.headers['x-hub-signature'];
