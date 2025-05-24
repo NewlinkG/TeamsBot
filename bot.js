@@ -246,7 +246,7 @@ class TeamsBot extends ActivityHandler {
 
     if (draft.state === 'editing') {
       const comment = text;
-      const ticketId = '10' + draft.ticketId;
+      const ticketId = draft.ticketId;
 
       const userName  = context.activity.from.name;
       const userEmail = context.activity.from.email
