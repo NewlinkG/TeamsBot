@@ -39,20 +39,15 @@ async function sendGraphTeamsMessage(userEmail, messageText) {
 
   // Step 2: Create a 1:1 chat (or get if it exists)
   const chat = await graphClient.api('/chats').post({
-    chatType: 'oneOnOne',
+    chatType: 'group',
     members: [
-      {
+        {
         '@odata.type': '#microsoft.graph.aadUserConversationMember',
-         roles: ['owner'],
+        roles: ['owner'],
         'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${aadId}')`
-      },
-      {
-        '@odata.type': '#microsoft.graph.aadUserConversationMember',
-         roles: ['owner'],
-        'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${process.env.MicrosoftAppId}')`
-      }
+        }
     ]
-  });
+    });
 
   // Step 3: Send the message
   await graphClient
