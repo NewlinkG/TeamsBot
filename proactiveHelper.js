@@ -1,22 +1,45 @@
 const { MicrosoftAppCredentials, ConnectorClient } = require('botframework-connector');
 const { Client } = require('@microsoft/microsoft-graph-client');
+const msal = require('@azure/msal-node');
 require('isomorphic-fetch');
 
-async function getAadObjectId(userEmail, credentials) {
-    const graphClient = Client.init({
-        authProvider: done => done(null, credentials.appPassword)
-    });
+const msal = require('@azure/msal-node');
 
-    const result = await graphClient
-        .api(`/users?$filter=mail eq '${userEmail}'`)
-        .select('id')
-        .get();
-
-    if (!result.value?.[0]?.id) {
-        throw new Error(`AAD ID not found for ${userEmail}`);
+async function getAccessToken() {
+  const msalConfig = {
+    auth: {
+      clientId: process.env.MicrosoftAppId,
+      authority: `https://login.microsoftonline.com/${process.env.TenantId}`,
+      clientSecret: process.env.MicrosoftAppPassword,
     }
+  };
 
-    return result.value[0].id;
+  const cca = new msal.ConfidentialClientApplication(msalConfig);
+
+  const result = await cca.acquireTokenByClientCredential({
+    scopes: ['https://graph.microsoft.com/.default'],
+  });
+
+  return result.accessToken;
+}
+
+async function getAadObjectId(userEmail) {
+  const token = await getAccessToken();
+
+  const graphClient = Client.init({
+    authProvider: done => done(null, token)
+  });
+
+  const result = await graphClient
+    .api(`/users?$filter=mail eq '${userEmail}'`)
+    .select('id')
+    .get();
+
+  if (!result.value?.[0]?.id) {
+    throw new Error(`AAD ID not found for ${userEmail}`);
+  }
+
+  return result.value[0].id;
 }
 
 async function sendProactiveTeamsMessage(userEmail, messageText) {
