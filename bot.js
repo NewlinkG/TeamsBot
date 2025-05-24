@@ -377,7 +377,7 @@ class TeamsBot extends ActivityHandler {
       return await context.sendActivity("🔍 You have no tickets.");
     }
 
-    tickets.sort((a, b) => b.id - a.id);
+    tickets.sort((a, b) => b.number - a.number);
     const filtered = showClosed
       ? tickets
       : tickets.filter(t => t.state?.toLowerCase() !== 'closed');
@@ -403,7 +403,7 @@ class TeamsBot extends ActivityHandler {
             },
             {
               type: 'TextBlock',
-              text: `#10${t.id} — ${t.state || 'Open'}`,
+              text: `#${t.number} — ${t.state || 'Open'}`,
               spacing: 'None',
               isSubtle: true,
               wrap: true

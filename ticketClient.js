@@ -59,12 +59,29 @@ async function listTickets(email, { openOnly = true } = {}) {
     From: email
   };
 
-  const baseUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search`;
+  // Step 1: Lookup user ID by email
+  let customerId = null;
+  try {
+    const userUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/users/search?query=email:${encodeURIComponent(email)}`;
+    const userRes = await axios.get(userUrl, { headers });
+    if (Array.isArray(userRes.data) && userRes.data.length > 0) {
+      customerId = userRes.data[0].id;
+    } else {
+      console.warn(`⚠️ No user found for email: ${email}`);
+      return [];
+    }
+  } catch (err) {
+    console.warn(`⚠️ Failed to fetch user ID for ${email}:`, err.message);
+    return [];
+  }
 
+  // Step 2: Build query using customer_id
+  const baseUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/tickets/search`;
   const query = openOnly
-    ? `(customer.email:"${email}") AND (state.name:new OR state.name:open)`
-    : `(customer.email:"${email}")`;
+    ? `customer_id:${customerId} AND (state.name:new OR state.name:open)`
+    : `customer_id:${customerId}`;
 
+  // Step 3: Fetch tickets (with pagination)
   let page = 1;
   let allTickets = [];
   let hasMore = true;
@@ -76,41 +93,35 @@ async function listTickets(email, { openOnly = true } = {}) {
     allTickets = allTickets.concat(batch);
     hasMore = batch.length > 0;
     page++;
-    if (openOnly) break; // ⛔ Only paginate for full history
   }
 
-  if (page === 1 && allTickets.length === 0) {
-    console.warn(`⚠️ No tickets found for: ${email} (query: ${query})`);
-    console.log(email, userEmail);
-  }
-
-  // Collect unique owner IDs
+  // Step 4: Fetch owner names (optional)
   const ownerIds = [...new Set(allTickets.map(t => t.owner_id).filter(Boolean))];
-
   let owners = {};
-  if (ownerIds.length > 0) {
-    for (const ownerId of ownerIds) {
-      try {
-        const userUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/${ownerId}`;
-        const userResp = await axios.get(userUrl, { headers });
-        const u = userResp.data;
 
-        if (u && u.firstname) {
-          owners[ownerId] = {
-            firstname: u.firstname,
-            lastname: u.lastname
-          };
-        }
-      } catch (err) {
-        console.warn(`⚠️ Failed to fetch user ${ownerId}:`, err.message);
+  for (const ownerId of ownerIds) {
+    try {
+      const userUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/users/${ownerId}`;
+      const userResp = await axios.get(userUrl, { headers });
+      const u = userResp.data;
+      if (u && u.firstname) {
+        owners[ownerId] = {
+          firstname: u.firstname,
+          lastname: u.lastname
+        };
       }
+    } catch (err) {
+      console.warn(`⚠️ Failed to fetch user ${ownerId}:`, err.message);
     }
   }
 
-  // Attach owner names to each ticket
+  // Step 5: Attach owner data
   for (const t of allTickets) {
     t.owner = owners[t.owner_id] || null;
   }
+
+  // Sort by newest first (optional)
+  allTickets.sort((a, b) => b.number - a.number);
 
   return allTickets;
 }
