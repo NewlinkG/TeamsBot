@@ -15,7 +15,7 @@ const fs                            = require('fs/promises');
 const fsSync                        = require('fs');
 const fetch                         = require('node-fetch');
 
-module.exports = async function (context, req) {
+module.exports = async function (context, myTimer) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
   try {
     const E = key => { const v = process.env[key]; if (!v) throw new Error(`Missing env var: ${key}`); return v; };

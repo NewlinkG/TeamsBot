@@ -17,7 +17,7 @@ TeamsBot/
 ├── api-tickets/            # API pública RESTful para manejar tickets
 ├── ingest-notion/          # Proceso de indexación periódica de contenido Notion
 ├── tabs-portal/            # App React embebida como pestaña (tab)
-├── teams-tab/              # Configuración de Teams para servir el tab
+├── teams-tab/              # Source para generar el tab de My Tickets
 ├── package.json            # Configuración del entorno y dependencias
 └── .env                    # Variables sensibles y tokens
 ```
@@ -47,7 +47,7 @@ TeamsBot/
 - `/api/keepalive`: para ping de disponibilidad
 
 ### 🧾 Tab Personalizado (React)
-- Formulario interactivo para crear tickets
+- Formulario interactivo para crear tickets (ToDo)
 - Listado de solicitudes abiertas
 - Artículos sugeridos dinámicamente
 
@@ -84,10 +84,42 @@ xcopy.exe .\build\* ..\teams-tab\ /S
 
 Archivo `.env` en la raíz (ver contenido completo en documento previo). Variables clave incluyen:
 
-- `MicrosoftAppId`, `MicrosoftAppPassword`
-- `HELPDESK_API_URL`, `HELPDESK_API_KEY`
-- `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`
-- `NOTION_TOKEN`, `PINECONE_API_KEY`
+- MicrosoftAppId=
+- MicrosoftAppPassword=
+- DEFAULT_SPANISH_VARIANT=es-LA  # es-ES for Spain Spanish
+- APPLICATIONINSIGHTS_CONNECTION_STRING=
+
+- PORT=3978
+- PING_URL=https://newlinker-fn.azurewebsites.net/api/keepalive
+
+- HELPDESK_API_URL=https://helpdesk.newlink-group.com/api/v1
+- HELPDESK_API_APPID=
+- HELPDESK_API_KEY=
+- HELPDESK_WEB_URL="https://helpdesk.newlink-group.com/#ticket/zoom"
+- HELPDESK_DEFAULT_GROUP=1
+- HELPDESK_TOKEN=
+
+- COMPUTER_VISION_ENDPOINT=https://teamsvision.cognitiveservices.azure.com/
+- COMPUTER_VISION_KEY=
+
+- PINECONE_API_KEY=
+- PINECONE_INDEX_NAME=teamsbot
+
+- NOTION_TOKEN=
+- NOTION_SITE_ROOT=edc1d177abab420ab59fac22018a9c55
+
+- AZURE_STORAGE_CONNECTION_STRING=
+- BLOB_RAW_NAME=raw-files
+- BLOB_EXTRACTED_NAME=extracted-text
+
+- AZURE_OPENAI_ENDPOINT=https://newlinker.openai.azure.com/
+- AZURE_OPENAI_API_VERSION=2025-01-01-preview
+- AZURE_OPENAI_KEY=
+- AZURE_OPENAI_DEPLOYMENT_ID=gpt-4o-mini
+- AZURE_EMBEDDING_DEPLOYMENT_ID=text-embedding-ada-002
+
+- DI_ENDPOINT=https://teamsbotdi.cognitiveservices.azure.com/
+- DI_KEY=
 
 ---
 

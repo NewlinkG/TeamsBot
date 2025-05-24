@@ -1,17 +1,10 @@
 {
   "bindings": [
     {
-      "authLevel": "anonymous",
-      "type": "httpTrigger",
+      "name": "myTimer",
+      "type": "timerTrigger",
       "direction": "in",
-      "name": "req",
-      "methods": ["get","post"],
-      "route": "ingest-notion"
-    },
-    {
-      "type": "http",
-      "direction": "out",
-      "name": "res"
+      "schedule": "0 0 3 * * *"
     }
   ]
 }
