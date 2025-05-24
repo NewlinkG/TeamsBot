@@ -266,6 +266,9 @@ class TeamsBot extends ActivityHandler {
         return;
       }
       let attachmentTokens = [];
+      // ✅ FIXED: MicrosoftAppCredentials.getToken() → use new method
+      const tokenProvider = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
+      const token = await tokenProvider.getToken();
 
       if (teamsFiles.length === 0 && context.activity.textFormat === 'html') {
         const html = context.activity.text || '';
@@ -276,10 +279,6 @@ class TeamsBot extends ActivityHandler {
           await context.sendActivity("⚠️ No pude procesar ninguna imagen embebida. Usa el botón de adjuntar si es posible.");
         }
       }
-
-      // ✅ FIXED: MicrosoftAppCredentials.getToken() → use new method
-      const tokenProvider = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
-      const token = await tokenProvider.getToken();
 
       for (const file of teamsFiles) {
         if (!file.contentUrl) {
