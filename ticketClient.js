@@ -62,7 +62,7 @@ async function listTickets(email, { openOnly = true } = {}) {
   // Step 1: Lookup user ID by email
   let customerId = null;
   try {
-    const userUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/users/search?query=email:${encodeURIComponent(email)}`;
+    const userUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/search?query=email:${encodeURIComponent(email)}`;
     const userRes = await axios.get(userUrl, { headers });
     if (Array.isArray(userRes.data) && userRes.data.length > 0) {
       customerId = userRes.data[0].id;
@@ -76,7 +76,7 @@ async function listTickets(email, { openOnly = true } = {}) {
   }
 
   // Step 2: Build query using customer_id
-  const baseUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/tickets/search`;
+  const baseUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search`;
   const query = openOnly
     ? `customer_id:${customerId} AND (state.name:new OR state.name:open)`
     : `customer_id:${customerId}`;
@@ -101,7 +101,7 @@ async function listTickets(email, { openOnly = true } = {}) {
 
   for (const ownerId of ownerIds) {
     try {
-      const userUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/users/${ownerId}`;
+      const userUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/${ownerId}`;
       const userResp = await axios.get(userUrl, { headers });
       const u = userResp.data;
       if (u && u.firstname) {
