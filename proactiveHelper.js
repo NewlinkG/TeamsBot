@@ -3,8 +3,6 @@ const { Client } = require('@microsoft/microsoft-graph-client');
 const msal = require('@azure/msal-node');
 require('isomorphic-fetch');
 
-const msal = require('@azure/msal-node');
-
 async function getAccessToken() {
   const msalConfig = {
     auth: {
