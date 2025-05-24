@@ -25,14 +25,19 @@ module.exports = async function (context, req) {
     .update(rawBody)
     .digest('hex');
 
+  context.log('🔍 Signature header:', signatureHeader);
+  context.log('🔍 Computed HMAC:', expectedHmac);
+
   if (!crypto.timingSafeEqual(Buffer.from(signatureValue), Buffer.from(expectedHmac))) {
     context.log.warn('⛔ Signature mismatch.');
     context.res = { status: 403, body: 'Invalid signature' };
     return;
   }
 
+
   // ✅ Valid request
-  const { article, updated_by, ticket } = req.body;
+  const { article, ticket } = req.body;
+  const updated_by = ticket.updated_by;
 
   if (!article || !updated_by || !ticket) {
     context.log.warn('⚠️ Incomplete payload:', req.body);
