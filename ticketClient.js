@@ -63,7 +63,7 @@ async function listTickets(email, { openOnly = true } = {}) {
 
   const query = openOnly
     ? `${email} state:(new OR open)`
-    : `${email}`; // will bring back everything
+    : `${email}`; // fetch all if needed
 
   let page = 1;
   let allTickets = [];
@@ -76,28 +76,33 @@ async function listTickets(email, { openOnly = true } = {}) {
     allTickets = allTickets.concat(batch);
     hasMore = batch.length > 0;
     page++;
-    if (openOnly) break; // ⛔ do not paginate unless pulling everything
+    if (openOnly) break; // ⛔ Only paginate for full history
   }
 
-  const uniqueOwnerIds = [...new Set(allTickets.map(t => t.owner_id).filter(Boolean))];
+  // Collect unique owner IDs
+  const ownerIds = [...new Set(allTickets.map(t => t.owner_id).filter(Boolean))];
 
   let owners = {};
-  if (uniqueOwnerIds.length > 0) {
-    const idsQuery = uniqueOwnerIds.map(id => `ids[]=${id}`).join('&');
-    const usersUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/users/show_many?${idsQuery}`;
-    const userResp = await axios.get(usersUrl, { headers });
-    const userList = userResp.data || [];
+  if (ownerIds.length > 0) {
+    const searchQuery = ownerIds.map(id => `id:${id}`).join(' OR ');
+    const usersUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/search?query=${encodeURIComponent(searchQuery)}`;
 
-    // Create a mapping: { 3: { firstname, lastname }, ... }
-    for (const u of userList) {
-      owners[u.id] = {
-        firstname: u.firstname,
-        lastname: u.lastname
-      };
+    try {
+      const userResp = await axios.get(usersUrl, { headers });
+      const userList = userResp.data || [];
+
+      for (const u of userList) {
+        owners[u.id] = {
+          firstname: u.firstname,
+          lastname: u.lastname
+        };
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to fetch owner names:', err.message);
     }
   }
 
-  // Attach full owner info to each ticket
+  // Attach owner names to each ticket
   for (const t of allTickets) {
     t.owner = owners[t.owner_id] || null;
   }
