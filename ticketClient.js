@@ -59,7 +59,7 @@ async function listTickets(email, { openOnly = true } = {}) {
     From: email
   };
 
-  const baseUrl = `${HELPDESK_URL.replace(/\/+$/, '')}/tickets/search`;
+  const baseUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search`;
 
   const query = openOnly
     ? `${email} state:(new OR open)`
