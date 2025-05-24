@@ -62,8 +62,8 @@ async function listTickets(email, { openOnly = true } = {}) {
   const baseUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search`;
 
   const query = openOnly
-    ? `${email} state:(new OR open)`
-    : `${email}`; // fetch all if needed
+    ? `(customer.email:"${email}") AND (state.name:new OR state.name:open)`
+    : `(customer.email:"${email}")`;
 
   let page = 1;
   let allTickets = [];
@@ -72,11 +72,16 @@ async function listTickets(email, { openOnly = true } = {}) {
   while (hasMore) {
     const url = `${baseUrl}?query=${encodeURIComponent(query)}&expand=true&page=${page}`;
     const res = await axios.get(url, { headers });
-    const batch = res.data || [];
+    const batch = Array.isArray(res.data) ? res.data : [];
     allTickets = allTickets.concat(batch);
     hasMore = batch.length > 0;
     page++;
     if (openOnly) break; // ⛔ Only paginate for full history
+  }
+
+  if (page === 1 && allTickets.length === 0) {
+    console.warn(`⚠️ No tickets found for: ${email} (query: ${query})`);
+    console.log(email, userEmail);
   }
 
   // Collect unique owner IDs
@@ -84,21 +89,21 @@ async function listTickets(email, { openOnly = true } = {}) {
 
   let owners = {};
   if (ownerIds.length > 0) {
-    const searchQuery = ownerIds.map(id => `id:${id}`).join(' OR ');
-    const usersUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/search?query=${encodeURIComponent(searchQuery)}`;
+    for (const ownerId of ownerIds) {
+      try {
+        const userUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/${ownerId}`;
+        const userResp = await axios.get(userUrl, { headers });
+        const u = userResp.data;
 
-    try {
-      const userResp = await axios.get(usersUrl, { headers });
-      const userList = userResp.data || [];
-
-      for (const u of userList) {
-        owners[u.id] = {
-          firstname: u.firstname,
-          lastname: u.lastname
-        };
+        if (u && u.firstname) {
+          owners[ownerId] = {
+            firstname: u.firstname,
+            lastname: u.lastname
+          };
+        }
+      } catch (err) {
+        console.warn(`⚠️ Failed to fetch user ${ownerId}:`, err.message);
       }
-    } catch (err) {
-      console.warn('⚠️ Failed to fetch owner names:', err.message);
     }
   }
 
@@ -171,7 +176,7 @@ async function closeTicket(ticketId, userEmail) {
     state_id: 4 // Adjust depending on your Zammad state mapping
   };
 
-  const url = `${HELPDESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
+  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
   const resp = await axios.put(url, payload, { headers });
   return resp.data;
 }
