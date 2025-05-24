@@ -27,7 +27,8 @@ const i18n = {
     ticketLabel:   'Ticket',
     createdSuffix: 'created successfully.',
     cancelled:     '👍 Ticket creation cancelled',
-    parseError:    'Sorry, I couldn’t parse that. Can you rephrase?'
+    parseError:    'Sorry, I couldn’t parse that. Can you rephrase?',
+    ticketClosed:  '✅ Ticket #{number} has been closed.'
   },
   pt: {
     confirmPrompt: 'Por favor confirme os detalhes do chamado:',
@@ -36,7 +37,8 @@ const i18n = {
     ticketLabel:   'Chamado',
     createdSuffix: 'criado com sucesso.',
     cancelled:     '👍 Criação de chamado cancelada',
-    parseError:    'Desculpe, não consegui entender. Pode reformular?'
+    parseError:    'Desculpe, não consegui entender. Pode reformular?',
+    ticketClosed:  '✅ Chamado #{number} foi encerrado.'
   },
   es: {
     confirmPrompt: 'Confirma los detalles del ticket:',
@@ -45,9 +47,11 @@ const i18n = {
     ticketLabel:   'Ticket',
     createdSuffix: 'creado correctamente.',
     cancelled:     '👍 Creación de ticket cancelada',
-    parseError:    'Lo siento, no entendí. ¿Puedes aclarar?'
+    parseError:    'Lo siento, no entendí. ¿Puedes aclarar?',
+    ticketClosed:  '✅ Ticket #{number} ha sido cerrado.'
   }
 };
+
 
 class TeamsBot extends ActivityHandler {
   constructor(conversationState) {
@@ -83,7 +87,7 @@ class TeamsBot extends ActivityHandler {
       const ticket = await createTicket({ title, description: summary, userName, userEmail });
 
       const successLine =
-        `✅ [${LC.ticketLabel} #${ticket.number}]` +
+        `✅ [${LC.ticketLabel} #${ticket.id}]` +
         `(${helpdeskWebUrl}/${ticket.id}) ${LC.createdSuffix}`;
 
       const finalCard = {
@@ -146,13 +150,16 @@ class TeamsBot extends ActivityHandler {
     }
 
     if (value && value.action === 'closeTicket') {
+      const cardLang = value.lang || lang;
       const ticketId = value.ticketId;
       const userName = context.activity.from.name;
       const userEmail = context.activity.from.email
         || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
       await closeTicket(ticketId, userEmail, cardLang);
-      return await context.sendActivity(`✅ Ticket #${value.ticketId} has been closed.`);
+      const LC = i18n[cardLang] || i18n['es'];
+      const message = LC.ticketClosed.replace('{number}', value.ticketId);
+      return await context.sendActivity(message);
     }
 
 
@@ -405,7 +412,7 @@ class TeamsBot extends ActivityHandler {
       return await context.sendActivity("🔍 You have no tickets.");
     }
 
-    tickets.sort((a, b) => b.number - a.number);
+    tickets.sort((a, b) => b.id - a.id);
     const filtered = showClosed
       ? tickets
       : tickets.filter(t => t.state?.toLowerCase() !== 'closed');
@@ -431,7 +438,7 @@ class TeamsBot extends ActivityHandler {
             },
             {
               type: 'TextBlock',
-              text: `#${t.number} — ${t.state || 'Open'}`,
+              text: `#${t.id} — ${t.state || 'Open'}`,
               spacing: 'None',
               isSubtle: true,
               wrap: true

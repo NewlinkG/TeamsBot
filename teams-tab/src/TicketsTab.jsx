@@ -83,7 +83,7 @@ export default function TicketsTab() {
               })
               .map((t) => (
                 <tr key={t.id} style={{ opacity: t.state?.toLowerCase() === "closed" ? 0.5 : 1 }}>
-                  <td>{t.number}</td>
+                  <td>{t.id}</td>
                   <td>{t.title}</td>
                   <td>
                     <span
