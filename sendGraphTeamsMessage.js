@@ -61,3 +61,5 @@ async function sendGraphTeamsMessage(userEmail, messageText) {
 
   console.log(`✅ Message sent to ${userEmail}`);
 }
+
+module.exports = { sendGraphTeamsMessage };
