@@ -66,7 +66,7 @@ export default function TicketsTab() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th>Ticket #</th>
+              <th>ID</th>
               <th>Title</th>
               <th>Status</th>
               <th>Owner</th>
