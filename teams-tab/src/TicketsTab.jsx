@@ -7,7 +7,20 @@ export default function TicketsTab() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState("default");
-  const [showClosed, setShowClosed] = useState(false);
+  const [filterState, setFilterState] = useState("active");
+
+  const stateIcons = {
+    new: "🆕",
+    open: "🛠",
+    "pending close": "🕓",
+    "pending reminder": "📅",
+    closed: "✅",
+    removed: "🗑"
+  };
+
+  const isActiveState = (state) =>
+    ["new", "open", "pending close", "pending reminder"].includes(state?.toLowerCase());
+
 
   useEffect(() => {
     microsoftTeams.app.initialize().then(() => {
@@ -16,28 +29,44 @@ export default function TicketsTab() {
         const userEmail = upn.replace(/@.*$/, "@newlink-group.com");
         setEmail(userEmail);
         setTheme(context.app?.theme || "default");
-        const res = await axios.get(`/api/tickets?email=${encodeURIComponent(userEmail)}&openOnly=${!showClosed}`);
+
+        // 👇 Determine what to fetch based on filter
+        const openOnly = filterState === "active";
+        const res = await axios.get(
+          `/api/tickets?email=${encodeURIComponent(userEmail)}&openOnly=${openOnly}`
+        );
         setTickets(res.data || []);
         setLoading(false);
       });
+
       microsoftTeams.app.registerOnThemeChangeHandler((newTheme) => {
         setTheme(newTheme);
       });
     });
-  }, []);
+  }, [filterState]);
 
   if (loading) return <p>Loading...</p>;
 
   return (
     <div className={`tab-container ${theme}`} style={{ padding: "1rem", fontFamily: "Segoe UI" }}>
       <h2>🎫 My Tickets</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
+        <div>
+          <label>Filter: </label>
+          <select value={filterState} onChange={(e) => setFilterState(e.target.value)}>
+            <option value="active">🛠 Active</option>
+            <option value="closed">✅ Closed</option>
+            <option value="all">📋 All</option>
+          </select>
+        </div>
+      </div>
       {tickets.length === 0 ? (
         <p>No tickets found for {email}.</p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th>ID</th>
+              <th>Ticket #</th>
               <th>Title</th>
               <th>Status</th>
               <th>Owner</th>
@@ -45,27 +74,58 @@ export default function TicketsTab() {
             </tr>
           </thead>
           <tbody>
-            {tickets.map((t) => (
-              <tr key={t.id} style={{ opacity: t.state?.toLowerCase() === "closed" ? 0.5 : 1 }}>
-                <td>{t.id}</td>
-                <td>{t.title}</td>
-                <td>{t.state}</td>
-                <td>{t.owner ? `${t.owner.firstname} ${t.owner.lastname || ""}` : "—"}</td>
-                <td>
-                  <a href={`https://helpdesk.newlink-group.com/${t.id}`} target="_blank" rel="noreferrer">🔗</a>&nbsp;
-                  <button onClick={() => promptComment(t.id)}>✏️</button>&nbsp;
-                  {t.state?.toLowerCase() !== "closed" && (
-                    <button onClick={() => closeTicket(t.id)}>✅</button>
-                  )}
-                </td>
-              </tr>
+            {tickets
+              .filter((t) => {
+                const state = t.state?.toLowerCase();
+                if (filterState === "active") return isActiveState(state);
+                if (filterState === "closed") return ["closed", "removed"].includes(state);
+                return true; // all
+              })
+              .map((t) => (
+                <tr key={t.id} style={{ opacity: t.state?.toLowerCase() === "closed" ? 0.5 : 1 }}>
+                  <td>{t.number}</td>
+                  <td>{t.title}</td>
+                  <td>
+                    <span
+                      style={{ whiteSpace: "nowrap", position: "relative", display: "inline-block" }}
+                    >
+                      {stateIcons[t.state?.toLowerCase()] || ""}
+
+                      <span
+                        style={{
+                          visibility: "hidden",
+                          backgroundColor: "#333",
+                          color: "#fff",
+                          textAlign: "center",
+                          borderRadius: "4px",
+                          padding: "4px 8px",
+                          position: "absolute",
+                          zIndex: 1,
+                          bottom: "125%", // above the icon
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          whiteSpace: "nowrap",
+                          fontSize: "12px"
+                        }}
+                        className="hover-tooltip"
+                      >
+                        {t.state?.charAt(0).toUpperCase() + t.state?.slice(1)}
+                      </span>
+                    </span>
+                  </td>
+                  <td>{t.owner ? `${t.owner.firstname} ${t.owner.lastname || ""}` : "—"}</td>
+                  <td>
+                    <a href={`https://helpdesk.newlink-group.com/#ticket/zoom/${t.id}`} target="_blank" rel="noreferrer">🔗</a>&nbsp;
+                    <button onClick={() => promptComment(t.id)}>✏️</button>&nbsp;
+                    {t.state?.toLowerCase() !== "closed" && (
+                      <button onClick={() => closeTicket(t.id)}>✅</button>
+                    )}
+                  </td>
+                </tr>
             ))}
           </tbody>
         </table>
       )}
-      <button onClick={() => setShowClosed((s) => !s)}>
-        {showClosed ? "🙈 Hide Closed" : "👁 Show Closed"}
-      </button>
     </div>
   );
 

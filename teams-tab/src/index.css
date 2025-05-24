@@ -76,3 +76,24 @@ code {
 .tab-container button:hover {
   background-color: var(--color-button-hover);
 }
+
+.hover-tooltip {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.hover-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%; /* Arrow below the tooltip */
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: #333 transparent transparent transparent;
+}
+
+td span:hover .hover-tooltip {
+  visibility: visible;
+  opacity: 1;
+}

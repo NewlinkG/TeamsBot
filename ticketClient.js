@@ -78,7 +78,7 @@ async function listTickets(email, { openOnly = true } = {}) {
   // Step 2: Build query using customer_id
   const baseUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/search`;
   const query = openOnly
-    ? `customer_id:${customerId} AND (state.name:new OR state.name:open)`
+    ? `customer_id:${customerId} AND (state.name:new OR state.name:open OR state.name:"pending close" OR state.name:"pending reminder")`
     : `customer_id:${customerId}`;
 
   // Step 3: Fetch tickets (with pagination)

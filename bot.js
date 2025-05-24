@@ -83,7 +83,7 @@ class TeamsBot extends ActivityHandler {
       const ticket = await createTicket({ title, description: summary, userName, userEmail });
 
       const successLine =
-        `✅ [${LC.ticketLabel} #${ticket.id}]` +
+        `✅ [${LC.ticketLabel} #${ticket.number}]` +
         `(${helpdeskWebUrl}/${ticket.id}) ${LC.createdSuffix}`;
 
       const finalCard = {
@@ -372,7 +372,7 @@ class TeamsBot extends ActivityHandler {
       || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
     const pageSize = 5;
-    const tickets = await listTickets(userEmail);
+    const tickets = await listTickets(userEmail, { openOnly: !showClosed });
     if (!tickets || tickets.length === 0) {
       return await context.sendActivity("🔍 You have no tickets.");
     }
