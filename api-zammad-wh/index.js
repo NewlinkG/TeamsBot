@@ -1,6 +1,6 @@
 const crypto = require('crypto');
-const { sendProactiveTeamsMessage } = require('./proactiveHelper');
-const { formatTicketUpdate } = require('./formatTicketUpdate');
+const { sendProactiveTeamsMessage } = require('../proactiveHelper');
+const { formatTicketUpdate } = require('../formatTicketUpdate');
 
 /**
  * Azure Function entry point
