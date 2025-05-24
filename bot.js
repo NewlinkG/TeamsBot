@@ -261,7 +261,21 @@ class TeamsBot extends ActivityHandler {
 
       for (const file of teamsFiles) {
         try {
-          const tokenId = await uploadAttachment(file.contentUrl, file.name, userEmail, token);
+          const fileRes = await axios.get(file.contentUrl, {
+            responseType: 'arraybuffer',
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+
+          const buffer = Buffer.from(fileRes.data);
+          const tokenId = await uploadAttachment(
+            {
+              buffer,
+              originalname: file.name || 'attachment'
+            },
+            userEmail
+          );
           attachmentTokens.push(tokenId);
         } catch (err) {
           console.warn(`Attachment upload failed: ${file.name}`, err.message);
@@ -342,7 +356,21 @@ class TeamsBot extends ActivityHandler {
 
           for (const file of teamsFiles) {
             try {
-              const tokenId = await uploadAttachment(file.contentUrl, file.name, userEmail, token);
+              const fileRes = await axios.get(file.contentUrl, {
+                responseType: 'arraybuffer',
+                headers: {
+                  Authorization: `Bearer ${token}`
+                }
+              });
+
+              const buffer = Buffer.from(fileRes.data);
+              const tokenId = await uploadAttachment(
+                {
+                  buffer,
+                  originalname: file.name || 'attachment'
+                },
+                userEmail
+              );
               attachmentTokens.push(tokenId);
             } catch (err) {
               console.warn(`Attachment upload failed: ${file.name}`, err.message);

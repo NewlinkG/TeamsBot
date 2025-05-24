@@ -127,41 +127,55 @@ async function listTickets(email, { openOnly = true } = {}) {
 }
 
 
-async function uploadAttachment(fileUrl, fileName, userEmail, bearerToken = null) {
-  const headers = bearerToken
-    ? { Authorization: `Bearer ${bearerToken}` }
-    : {};
-
-  const fileResp = await axios.get(fileUrl, {
-    responseType: 'arraybuffer',
-    headers
-  });
-
+async function uploadAttachment(file, userEmail) {
   const form = new FormData();
-  form.append('file', fileResp.data, { filename: fileName });
+  form.append('file', file.buffer, file.originalname);
 
-  const uploadHeaders = {
+  const headers = {
     Authorization: `Token token=${HELP_DESK_TOKEN}`,
     ...form.getHeaders(),
     From: userEmail
   };
 
-  const resp = await axiosRaw.post(
-    `${HELP_DESK_URL.replace(/\/+$/, '')}/upload`,
-    form,
-    { headers: uploadHeaders }
-  );
-
-  return resp.data.token;
+  const res = await axios.post(`${HELP_DESK_URL}/uploads`, form, { headers });
+  return res.data[0]?.token;
 }
 
 
-async function addCommentToTicket(ticketId, comment, userEmail, attachments = []) {
+async function addCommentToTicket(ticketId, comment, userEmail, teamsAttachments = []) {
   const headers = {
     Authorization: `Token token=${HELP_DESK_TOKEN}`,
     'Content-Type': 'application/json',
     From: userEmail
   };
+
+  const uploadedTokens = [];
+
+  for (const att of teamsAttachments) {
+    try {
+      if (
+        att.contentType === 'application/vnd.microsoft.teams.file.download.info' &&
+        att.content?.downloadUrl
+      ) {
+        const fileRes = await axios.get(att.content.downloadUrl, {
+          responseType: 'arraybuffer'
+        });
+
+        const buffer = Buffer.from(fileRes.data);
+        const token = await uploadAttachment(
+          {
+            buffer,
+            originalname: att.name || 'attachment'
+          },
+          userEmail
+        );
+
+        if (token) uploadedTokens.push(token);
+      }
+    } catch (err) {
+      console.error(`❌ Attachment upload failed: ${att.name}`, err.message);
+    }
+  }
 
   const payload = {
     state: "open",
@@ -172,8 +186,8 @@ async function addCommentToTicket(ticketId, comment, userEmail, attachments = []
     }
   };
 
-  if (attachments && attachments.length > 0) {
-    payload.article.attachments = attachments;
+  if (uploadedTokens.length > 0) {
+    payload.article.attachments = uploadedTokens;
   }
 
   const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
