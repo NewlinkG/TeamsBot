@@ -164,9 +164,11 @@ async function addCommentToTicket(ticketId, comment, userEmail, attachments = []
   };
 
   const payload = {
+    state: "open",
     article: {
+      subject: "Comment from Teams",
       body: comment,
-      type: 'note',
+      internal: false,
     }
   };
 
@@ -174,9 +176,9 @@ async function addCommentToTicket(ticketId, comment, userEmail, attachments = []
     payload.article.attachments = attachments;
   }
 
-  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}/articles`;
+  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
   console.log('Posting comment to Zammad:', ticketId, JSON.stringify(payload, null, 2));
-  const resp = await axios.post(url, payload, { headers });
+  const resp = await axios.put(url, payload, { headers });
   return resp.data;
 }
 
@@ -188,7 +190,10 @@ async function closeTicket(ticketId, userEmail) {
   };
 
   const payload = {
-    state_id: 4 // Adjust depending on your Zammad state mapping
+    state: "closed", // Adjust depending on your Zammad state mapping
+    article: {
+      subject: "Closing from Teams",
+    }
   };
 
   const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
