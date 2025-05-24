@@ -54,7 +54,7 @@ module.exports = async function (context, req) {
     .join('\n') || 'Ninguno';
 
   const message = formatTicketUpdate({ ticket, article, updated_by });
-  const recipientEmail = ticket.customer; // or `created_by`, depending on your Zammad config
+  const recipientEmail = ticket.customer.email; // or `created_by`, depending on your Zammad config
 
   if (recipientEmail) {
     await sendProactiveTeamsMessage(recipientEmail, message);
