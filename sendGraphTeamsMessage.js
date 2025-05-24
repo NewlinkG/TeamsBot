@@ -43,8 +43,13 @@ async function sendGraphTeamsMessage(userEmail, messageText) {
     members: [
       {
         '@odata.type': '#microsoft.graph.aadUserConversationMember',
-        roles: ['owner'],
+         roles: ['owner'],
         'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${aadId}')`
+      },
+      {
+        '@odata.type': '#microsoft.graph.aadUserConversationMember',
+         roles: ['owner'],
+        'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${process.env.MicrosoftAppId}')`
       }
     ]
   });
