@@ -130,20 +130,37 @@ export default function TicketsTab() {
   );
 
   function promptComment(ticketId) {
-    const comment = prompt(`Comment for ticket #${ticketId}:`);
+    const comment = prompt(`Agregar comentario al ticket #${ticketId}:`);
     if (!comment) return;
-    axios.post(`/api/tickets/${ticketId}/comment`, { email, comment }).then(() => {
-      alert("Comment added.");
-    });
+
+    // POST al backend para agregar comentario
+    axios.post(`/api/tickets/${ticketId}/comment`, { email, comment })
+      .then(() => {
+        alert("✅ Comentario agregado.");
+      })
+      .catch(() => {
+        alert("❌ Falló al agregar el comentario.");
+      });
+
+    // Abrir chat con el bot en caso de que el usuario necesite más interacción
+    const chatUrl = `https://teams.microsoft.com/l/chat/0/0?users=${email}&message=/edit ${ticketId}`;
+    if (window.confirm("¿Querés abrir el chat con el bot para continuar la edición?")) {
+      window.open(chatUrl, "_blank");
+    }
   }
 
   function closeTicket(ticketId) {
-    if (!window.confirm(`Close ticket #${ticketId}?`)) return;
-    axios.post(`/api/tickets/${ticketId}/close`, { email }).then(() => {
-      alert("Ticket closed.");
-      setTickets(tickets.map(t =>
-        t.id === ticketId ? { ...t, state: "closed" } : t
-      ));
-    });
+    if (!window.confirm(`¿Cerrar el ticket #${ticketId}?`)) return;
+
+    axios.post(`/api/tickets/${ticketId}/close`, { email })
+      .then(() => {
+        alert("✅ Ticket cerrado.");
+        setTickets(tickets.map(t =>
+          t.id === ticketId ? { ...t, state: "closed" } : t
+        ));
+      })
+      .catch(() => {
+        alert("❌ Falló al cerrar el ticket.");
+      });
   }
 }
