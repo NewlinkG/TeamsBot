@@ -60,6 +60,7 @@ class TeamsBot extends ActivityHandler {
     this.draftAccessor    = conversationState.createProperty('ticketDraft');
     this.onMessage(this.handleMessage.bind(this));
   }
+  
 
   async handleMessage(context, next) {
     const text   = (context.activity.text || '').trim();
@@ -264,7 +265,17 @@ class TeamsBot extends ActivityHandler {
         await context.sendActivity("⚠️ No attachments found in your message.");
         return;
       }
-      const attachmentTokens = [];
+      let attachmentTokens = [];
+
+      if (teamsFiles.length === 0 && context.activity.textFormat === 'html') {
+        const html = context.activity.text || '';
+        const extractedTokens = await extractInlineImagesFromHtml(html, token, userEmail);
+        if (extractedTokens.length > 0) {
+          attachmentTokens.push(...extractedTokens);
+        } else {
+          await context.sendActivity("⚠️ No pude procesar ninguna imagen embebida. Usa el botón de adjuntar si es posible.");
+        }
+      }
 
       // ✅ FIXED: MicrosoftAppCredentials.getToken() → use new method
       const tokenProvider = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
@@ -541,6 +552,39 @@ class TeamsBot extends ActivityHandler {
     }
   }
 
+  async extractInlineImagesFromHtml(html, token, userEmail) {
+    const attachmentTokens = [];
+
+    const imgRegex = /<img[^>]+src="([^"]+)"/g;
+    const matches = [...html.matchAll(imgRegex)];
+
+    for (const match of matches) {
+      const imageUrl = match[1];
+      console.log("📎 Found inline image URL:", imageUrl);
+
+      try {
+        const imgRes = await axios.get(imageUrl, {
+          responseType: 'arraybuffer',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const buffer = Buffer.from(imgRes.data);
+        const tokenId = await uploadAttachment(
+          {
+            buffer,
+            originalname: 'inline-image.png'
+          },
+          userEmail
+        );
+
+        attachmentTokens.push(tokenId);
+      } catch (err) {
+        console.warn("❌ Failed to download inline image:", imageUrl, err.message);
+      }
+    }
+
+    return attachmentTokens;
+  }
 }
 
 module.exports.TeamsBot = TeamsBot;
