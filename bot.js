@@ -253,7 +253,7 @@ class TeamsBot extends ActivityHandler {
     }
 
     if (draft.state === 'editing') {
-      const comment = text;
+      let comment = text?.trim() || '';
       const ticketId = draft.ticketId;
 
       const userName  = context.activity.from.name;
@@ -277,6 +277,17 @@ class TeamsBot extends ActivityHandler {
           attachmentTokens.push(...extractedTokens);
         } else {
           await context.sendActivity("⚠️ No pude procesar ninguna imagen embebida. Usa el botón de adjuntar si es posible.");
+        }
+      }
+
+      // 🔗 Extraer enlaces de SharePoint si están embebidos en el HTML del mensaje
+      if (context.activity.textFormat === 'html') {
+        const html = context.activity.text || '';
+        const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+sharepoint\.com[^"]+)"/g)];
+        if (linkMatches.length > 0) {
+          const links = linkMatches.map(m => m[1]);
+          const linkNote = links.map(url => `🔗 Archivo compartido: ${url}`).join('\n');
+          comment = `${comment}\n\n${linkNote}`.trim();
         }
       }
 
@@ -308,7 +319,11 @@ class TeamsBot extends ActivityHandler {
         }
       }
 
-      await addCommentToTicket(ticketId, comment, userEmail, attachmentTokens);
+      if (!comment && attachmentTokens.length === 0) {
+        return await context.sendActivity("✏️ Escribe un comentario o adjunta un archivo.");
+      }
+
+      await addCommentToTicket(ticketId, comment || "Archivo adjunto desde Teams.", userEmail, attachmentTokens);
 
       await this.draftAccessor.set(context, { state: 'idle', history: [] });
       return await context.sendActivity(`✅ Your comment has been added to ticket #${draft.ticketId}.`);
@@ -371,7 +386,7 @@ class TeamsBot extends ActivityHandler {
         if (info.ticketId) {
           const userName  = context.activity.from.name;
           const userEmail = `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
-          const comment = info.comment || text;
+          let comment = value.comment?.trim() || '';
 
           let attachmentTokens = [];
           const teamsFiles = context.activity.attachments || [];
@@ -400,15 +415,43 @@ class TeamsBot extends ActivityHandler {
               );
               attachmentTokens.push(tokenId);
             } catch (err) {
-              console.warn(`Attachment upload failed: ${file.name}`, err.message);
+              console.warn(`Attachment upload failed: ${file.name || 'undefined'}`, err.message);
             }
           }
 
+          // 📎 Procesar imágenes embebidas si no hubo adjuntos válidos
+          if (teamsFiles.length === 0 && context.activity.textFormat === 'html') {
+            const html = context.activity.text || '';
+            const extractedTokens = await extractInlineImagesFromHtml(html, token, userEmail);
+            if (extractedTokens.length > 0) {
+              attachmentTokens.push(...extractedTokens);
+            } else {
+              console.warn("⚠️ No se encontraron imágenes embebidas o fallaron todas.");
+            }
+          }
+
+          // 🔗 Agregar enlaces de archivos compartidos si existen en el HTML
+          if (context.activity.textFormat === 'html') {
+            const html = context.activity.text || '';
+            const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+sharepoint\.com[^"]+)"/g)];
+            if (linkMatches.length > 0) {
+              const links = linkMatches.map(m => m[1]);
+              const linkNote = links.map(url => `🔗 Archivo compartido: ${url}`).join('\n');
+              comment = `${comment}\n\n${linkNote}`.trim();
+            }
+          }
+
+          // ✅ Validación final
+          if (!comment && attachmentTokens.length === 0) {
+            return await context.sendActivity("✏️ Escribe un comentario o adjunta un archivo.");
+          }
+
           await addCommentToTicket(info.ticketId, comment, userEmail, attachmentTokens);
-          return await context.sendActivity(`📝 Comment added to ticket #${info.ticketId}${attachmentTokens.length ? ' with attachments.' : '.'}`);
+          return await context.sendActivity(`📝 Comentario agregado al ticket #${info.ticketId}${attachmentTokens.length ? ' con archivo(s).' : '.'}`);
         }
         break;
       }
+
 
 
       default: {
