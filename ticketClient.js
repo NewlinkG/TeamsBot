@@ -171,24 +171,37 @@ async function addCommentToTicket(ticketId, comment, userEmail, attachmentTokens
 }
 
 
-async function closeTicket(ticketId, userEmail) {
+async function closeTicket(ticketId, userEmail, lang = 'es') {
   const headers = {
     Authorization: `Token token=${HELP_DESK_TOKEN}`,
     'Content-Type': 'application/json',
     From: userEmail
   };
 
+  const closeMessages = {
+  es: "Este ticket ha sido cerrado por el usuario desde Teams.",
+  en: "This ticket has been closed by the user from Teams.",
+  pt: "Este chamado foi encerrado pelo usuário via Teams."
+};
+
+const localizedBody = closeMessages[lang] || closeMessages['es'];
+
   const payload = {
-    state: "closed", // Adjust depending on your Zammad state mapping
-    article: {
-      subject: "Closing from Teams",
-    }
-  };
+  state: "closed",
+  article: {
+    subject: "Closed from Teams",
+    body: localizedBody,
+    type: "note",
+    internal: false
+  }
+};
+
 
   const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
   const resp = await axios.put(url, payload, { headers });
   return resp.data;
 }
+
 
 
 module.exports = {
