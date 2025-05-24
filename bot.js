@@ -60,7 +60,69 @@ class TeamsBot extends ActivityHandler {
     this.draftAccessor    = conversationState.createProperty('ticketDraft');
     this.onMessage(this.handleMessage.bind(this));
   }
-  
+
+  async processAttachments(context, token, userEmail) {
+    const attachmentTokens = [];
+    let commentNote = '';
+
+    const teamsFiles = context.activity.attachments || [];
+
+    for (const file of teamsFiles) {
+      if (!file.contentUrl) {
+        console.warn("📎 Attachment has no contentUrl:", file);
+        continue;
+      }
+
+      if (file.contentUrl.includes('sharepoint.com') || file.contentUrl.includes('my.sharepoint.com')) {
+        console.warn(`📎 Skipping OneDrive/SharePoint file: ${file.name}`);
+        const linkNote = `🔗 Archivo compartido: ${file.contentUrl}`;
+        commentNote += `\n\n${linkNote}`;
+        continue;
+      }
+
+      try {
+        console.log("📎 Trying to download:", file.name, file.contentUrl);
+        const fileRes = await axios.get(file.contentUrl, {
+          responseType: 'arraybuffer',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const buffer = Buffer.from(fileRes.data);
+        const tokenId = await uploadAttachment(
+          { buffer, originalname: file.name || 'attachment' },
+          userEmail
+        );
+
+        attachmentTokens.push(tokenId);
+      } catch (err) {
+        console.warn(`Attachment upload failed: ${file.name || 'undefined'}`, err.message);
+      }
+    }
+
+    // Fallback to extracting inline images if no valid attachments
+    if (attachmentTokens.length === 0 && context.activity.textFormat === 'html') {
+      const html = context.activity.text || '';
+      const extracted = await this.extractInlineImagesFromHtml(html, token, userEmail);
+      if (extracted.length > 0) {
+        attachmentTokens.push(...extracted);
+      } else {
+        console.warn("⚠️ No se encontraron imágenes embebidas o fallaron todas.");
+      }
+    }
+
+    // Detect embedded SharePoint links in HTML content
+    if (context.activity.textFormat === 'html') {
+      const html = context.activity.text || '';
+      const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+sharepoint\.com[^"]+)"/g)];
+      if (linkMatches.length > 0) {
+        const links = linkMatches.map(m => m[1]);
+        const linkNote = links.map(url => `🔗 Archivo compartido: ${url}`).join('\n');
+        commentNote += `\n\n${linkNote}`;
+      }
+    }
+
+    return { attachmentTokens, commentNote: commentNote.trim() };
+  }
 
   async handleMessage(context, next) {
     const text   = (context.activity.text || '').trim();
@@ -265,59 +327,10 @@ class TeamsBot extends ActivityHandler {
         await context.sendActivity("⚠️ No attachments found in your message.");
         return;
       }
-      let attachmentTokens = [];
-      // ✅ FIXED: MicrosoftAppCredentials.getToken() → use new method
-      const tokenProvider = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
-      const token = await tokenProvider.getToken();
-
-      if (teamsFiles.length === 0 && context.activity.textFormat === 'html') {
-        const html = context.activity.text || '';
-        const extractedTokens = await extractInlineImagesFromHtml(html, token, userEmail);
-        if (extractedTokens.length > 0) {
-          attachmentTokens.push(...extractedTokens);
-        } else {
-          await context.sendActivity("⚠️ No pude procesar ninguna imagen embebida. Usa el botón de adjuntar si es posible.");
-        }
-      }
-
-      // 🔗 Extraer enlaces de SharePoint si están embebidos en el HTML del mensaje
-      if (context.activity.textFormat === 'html') {
-        const html = context.activity.text || '';
-        const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+sharepoint\.com[^"]+)"/g)];
-        if (linkMatches.length > 0) {
-          const links = linkMatches.map(m => m[1]);
-          const linkNote = links.map(url => `🔗 Archivo compartido: ${url}`).join('\n');
-          comment = `${comment}\n\n${linkNote}`.trim();
-        }
-      }
-
-      for (const file of teamsFiles) {
-        if (!file.contentUrl) {
-          console.warn("Attachment has no contentUrl:", file);
-          continue;
-        }
-        try {
-          console.log("📎 Trying to download:", file.name, file.contentUrl);
-          const fileRes = await axios.get(file.contentUrl, {
-            responseType: 'arraybuffer',
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
-
-          const buffer = Buffer.from(fileRes.data);
-          const tokenId = await uploadAttachment(
-            {
-              buffer,
-              originalname: file.name || 'attachment'
-            },
-            userEmail
-          );
-          attachmentTokens.push(tokenId);
-        } catch (err) {
-          console.warn(`Attachment upload failed: ${file.name}`, err.message);
-        }
-      }
+      const creds = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
+      const token = await creds.getToken();
+      const { attachmentTokens, commentNote } = await this.processAttachments(context, token, userEmail);
+      comment = `${comment}\n\n${commentNote}`.trim();
 
       if (!comment && attachmentTokens.length === 0) {
         return await context.sendActivity("✏️ Escribe un comentario o adjunta un archivo.");
@@ -388,60 +401,11 @@ class TeamsBot extends ActivityHandler {
           const userEmail = `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
           let comment = value.comment?.trim() || '';
 
-          let attachmentTokens = [];
-          const teamsFiles = context.activity.attachments || [];
-
-          // 🔐 Get bot token to download Teams file from contentUrl
           const creds = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
           const token = await creds.getToken();
+          const { attachmentTokens, commentNote } = await this.processAttachments(context, token, userEmail);
+          comment = `${comment}\n\n${commentNote}`.trim();
 
-          for (const file of teamsFiles) {
-            try {
-              console.log("📎 Trying to download:", file.name, file.contentUrl);
-              const fileRes = await axios.get(file.contentUrl, {
-                responseType: 'arraybuffer',
-                headers: {
-                  Authorization: `Bearer ${token}`
-                }
-              });
-
-              const buffer = Buffer.from(fileRes.data);
-              const tokenId = await uploadAttachment(
-                {
-                  buffer,
-                  originalname: file.name || 'attachment'
-                },
-                userEmail
-              );
-              attachmentTokens.push(tokenId);
-            } catch (err) {
-              console.warn(`Attachment upload failed: ${file.name || 'undefined'}`, err.message);
-            }
-          }
-
-          // 📎 Procesar imágenes embebidas si no hubo adjuntos válidos
-          if (teamsFiles.length === 0 && context.activity.textFormat === 'html') {
-            const html = context.activity.text || '';
-            const extractedTokens = await extractInlineImagesFromHtml(html, token, userEmail);
-            if (extractedTokens.length > 0) {
-              attachmentTokens.push(...extractedTokens);
-            } else {
-              console.warn("⚠️ No se encontraron imágenes embebidas o fallaron todas.");
-            }
-          }
-
-          // 🔗 Agregar enlaces de archivos compartidos si existen en el HTML
-          if (context.activity.textFormat === 'html') {
-            const html = context.activity.text || '';
-            const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+sharepoint\.com[^"]+)"/g)];
-            if (linkMatches.length > 0) {
-              const links = linkMatches.map(m => m[1]);
-              const linkNote = links.map(url => `🔗 Archivo compartido: ${url}`).join('\n');
-              comment = `${comment}\n\n${linkNote}`.trim();
-            }
-          }
-
-          // ✅ Validación final
           if (!comment && attachmentTokens.length === 0) {
             return await context.sendActivity("✏️ Escribe un comentario o adjunta un archivo.");
           }
@@ -451,7 +415,6 @@ class TeamsBot extends ActivityHandler {
         }
         break;
       }
-
 
 
       default: {
