@@ -7,7 +7,7 @@ const {
 } = require('./openaiClient');
 const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket } = require('./ticketClient');
 const { MicrosoftAppCredentials } = require('botframework-connector'); // at the top
-
+const axios = require('axios');
 
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
 if (!helpdeskWebUrl) throw new Error('Missing HELPDESK_WEB_URL env var');
