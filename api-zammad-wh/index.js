@@ -107,8 +107,10 @@ module.exports = async function (context, req) {
               : '👨‍🔧 Unassigned', isSubtle: true, wrap: true },
           // ─── Content ─────────────────────────────────────────
           { type:'TextBlock', text: content, wrap:true },
-          { type:'TextBlock', text:'**Attachments:**', wrap:true },
-          { type:'TextBlock', text: attachmentsList, wrap:true },
+          ...(attachmentsList && attachmentsList !== '(none)' ? [
+            { type:'TextBlock', text:'**Attachments:**', wrap:true },
+            { type:'TextBlock', text: attachmentsList, wrap:true }
+          ] : []),
         ],
         actions,
         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
@@ -151,8 +153,10 @@ module.exports = async function (context, req) {
                 ? `👨‍🔧 ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
                 : '👨‍🔧 Unassigned', isSubtle: true, wrap: true },
             { type:'TextBlock', text: content, wrap:true },
-            { type:'TextBlock', text:'**Attachments:**', wrap:true },
-            { type:'TextBlock', text: attachmentsList, wrap:true },
+            ...(attachmentsList && attachmentsList !== '(none)' ? [
+              { type:'TextBlock', text:'**Attachments:**', wrap:true },
+              { type:'TextBlock', text: attachmentsList, wrap:true }
+            ] : []),
           ],
           actions: custActions,
           $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
