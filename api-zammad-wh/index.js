@@ -19,8 +19,8 @@ module.exports = async function (context, req) {
   // validate signature (unchanged)
   const rawBody = req.rawBody;
   const signatureHeader = req.headers['x-hub-signature'];
-  const hmac = crypto.createHmac('sha256', SHARED_SECRET).update(rawBody).digest('hex');
-  if (`sha256=${hmac}` !== signatureHeader) {
+  const hmac = crypto.createHmac('sha1', SHARED_SECRET).update(rawBody).digest('hex');
+  if (`sha1=${hmac}` !== signatureHeader) {
     context.log.warn('⚠️ Invalid webhook signature');
     context.res = { status: 401 };
     return;
