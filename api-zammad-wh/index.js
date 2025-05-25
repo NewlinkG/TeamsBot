@@ -1,9 +1,8 @@
 const crypto = require('crypto');
 const { formatTicketUpdate } = require('../formatTicketUpdate');
 const { BotFrameworkAdapter } = require('botbuilder');
-const { MicrosoftAppId, MicrosoftAppPassword } = process.env; 
+const { MicrosoftAppId, MicrosoftAppPassword } = process.env;
 const { getAllUsers } = require('../teamsIdStore');
-
 
 const adapter = new BotFrameworkAdapter({
   appId: MicrosoftAppId,
@@ -11,19 +10,32 @@ const adapter = new BotFrameworkAdapter({
 });
 
 /**
- * Azure Function entry point
+ * Azure Function entry point for Zammad webhook
  */
 module.exports = async function (context, req) {
-  const SHARED_SECRET = process.env.HELPDESK_WEBHOOK_SECRET; // define en App Settings
+  const SHARED_SECRET = process.env.HELPDESK_WEBHOOK_SECRET;
   context.log('🔔 Webhook received:', JSON.stringify(req.body, null, 2));
-  const users = await getAllUsers();
-  // Determine notification targets based on ticket state
-  const { article, ticket } = req.body;
-  const recipientEmail = ticket.customer?.email;
-  context.log(`🔍 ticket.id=${ticket.id}, state=${ticket.state}, channel=${article.type}, customer=${recipientEmail}`);
-  // 🧾 Raw body as string
+
+  // validate signature (unchanged)
   const rawBody = req.rawBody;
   const signatureHeader = req.headers['x-hub-signature'];
+  const hmac = crypto.createHmac('sha256', SHARED_SECRET).update(rawBody).digest('hex');
+  if (`sha256=${hmac}` !== signatureHeader) {
+    context.log.warn('⚠️ Invalid webhook signature');
+    context.res = { status: 401 };
+    return;
+  }
+
+  const users = await getAllUsers();
+
+  // Extract core fields
+  const { article, ticket } = req.body;
+  const recipientEmail = ticket.customer?.email;
+  // ─── Ticket detail extraction ──────────────────────────────────────
+  const content = (article.body || '(no content)').replace(/<[^>]+>/g, '').trim();
+  const attachmentsList = (article.attachments || [])
+    .map(att => `- [${att.filename}](${att.url || att.content_url})`)
+    .join('\n') || '(none)';
 
   if (!article || !ticket || !recipientEmail) {
     context.log.warn('⚠️ Incomplete payload:', req.body);
@@ -31,255 +43,132 @@ module.exports = async function (context, req) {
     return;
   }
 
+  // Determine context
   const ticketState = (ticket.state || '').toLowerCase();
-  context.log(`📌 Ticket state: ${ticketState}, channel: ${article.type}`);
-  let agentsToNotify = [];
+  const channel     = (article.type || '').toLowerCase();
+  const isEmailWeb  = ['email', 'web'].includes(channel);
 
-  if (
-    ticketState === 'new' &&
-    ['email', 'web'].includes((article.type || '').toLowerCase())
-  ) {
-    agentsToNotify = (ticket.organization?.members || []).filter(email =>
-      email.toLowerCase() !== recipientEmail.toLowerCase()
-    );
-  } else if (ticket.owner?.email) {
-    // Notify only the owner
-    context.log('🔍 Branch: TICKET UPDATE; notify only the owner');
+  context.log(`📌 Ticket ${ticket.id}: state=${ticketState}, channel=${channel}`);
+
+  // Determine agents to notify
+  let agentsToNotify;
+  if (ticket.owner?.email) {
     agentsToNotify = [ticket.owner.email];
-    context.log(`👥 agentsToNotify: ${agentsToNotify.join(', ')}`);
+  } else {
+    agentsToNotify = ticket.group?.users || [];
   }
+  context.log(`👥 agentsToNotify: ${agentsToNotify.join(', ')}`);
 
-  // Loop over selected recipients and send notification
+  // Determine if customer should be notified
+  const lowerAgents = agentsToNotify.map(e => e.toLowerCase());
+  let notifyCustomer = false;
+  if (isEmailWeb) {
+    notifyCustomer = recipientEmail && !lowerAgents.includes(recipientEmail.toLowerCase());
+  } else {
+    // Teams-origin: only notify customer on updates/closings
+    notifyCustomer = ticketState !== 'new';
+  }
+  context.log(`📣 notifyCustomer? ${notifyCustomer}`);
+
+  // Send notifications to agents
   for (const email of agentsToNotify) {
-    const normalized = email.toLowerCase();
-    const record = users[normalized];
-    context.log(`🛠️  Processing agent '${email}' → record:${record ? 'yes' : 'no'}`);
-
-    if (!record?.reference?.user?.id || !record.reference?.conversation?.id) {
-      context.log(`ℹ️ Skipping ${email} — no Teams reference`);
+    const rec = users[email.toLowerCase()];
+    if (!rec?.reference?.user?.id) {
+      context.log(`ℹ️ Skipping agent ${email} — no Teams reference`);
       continue;
     }
-    
-    context.log(`   ✔ Sending Teams card to ${email}`);
-    try {
-      await adapter.continueConversation(record.reference, async (ctx) => {
-        const card = {
+    await adapter.continueConversation(rec.reference, async (ctx) => {
+      // Build header
+      const header =
+        ticketState === 'new'    ? '📥 New Ticket Created' :
+        ticketState === 'closed' ? '🚫 Ticket Closed'       :
+                                    '✏️ Ticket Updated';
+
+      // Build actions
+      const actions = [
+        { type: 'Action.OpenUrl', title: '🔗 View in browser', url: `${process.env.HELPDESK_WEB_URL}/${ticket.id}` },
+        ...(ticketState === 'new' && !ticket.owner?.email
+          ? [{ type: 'Action.Submit', title: '✋ Claim', data: { action: 'claimTicket', ticketId: ticket.id } }]
+          : [{ type: 'Action.Submit', title: '✏️ Edit', data: { action: 'startEditTicket', ticketId: ticket.id } }]
+        ),
+        ...(ticketState !== 'closed'
+          ? [{ type: 'Action.Submit', title: '✅ Close', data: { action: 'closeTicket', ticketId: ticket.id } }]
+          : [])
+      ];
+
+      const card = {
+        type: 'AdaptiveCard',
+        body: [
+          { type: 'TextBlock', text: header, weight: 'Bolder', size: 'Medium', wrap: true },
+          { type: 'TextBlock', text: `**${ticket.title}**`, wrap: true },
+          { type: 'TextBlock', text: `#${ticket.id} — ${ticket.state}`, isSubtle: true, wrap: true },
+          { type: 'TextBlock', text: ticket.owner
+              ? `👨‍🔧 Assigned to ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
+              : '👨‍🔧 Unassigned', isSubtle: true, wrap: true },
+          // ─── Content ─────────────────────────────────────────
+          { type:'TextBlock', text: content, wrap:true },
+          { type:'TextBlock', text:'**Attachments:**', wrap:true },
+          { type:'TextBlock', text: attachmentsList, wrap:true },
+        ],
+        actions,
+        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+        version: '1.4'
+      };
+      await ctx.sendActivity({ attachments: [{ contentType: 'application/vnd.microsoft.card.adaptive', content: card }] });
+      context.log(`📤 Notified agent ${email}`);
+    }).catch(err => {
+      context.log.warn(`⚠️ Failed to notify agent ${email}:`, err.message);
+    });
+  }
+
+  // Send notification to customer if applicable
+  if (notifyCustomer) {
+    const rec = users[recipientEmail.toLowerCase()];
+    if (!rec?.reference?.user?.id) {
+      context.log(`⚠️ Skipping customer ${recipientEmail} — no Teams reference`);
+    } else {
+      await adapter.createConversation(rec.reference, async (ctx) => {
+        const header =
+          ticketState === 'new'    ? '📥 Your ticket was created' :
+          ticketState === 'closed' ? '🚫 Your ticket was closed'  :
+                                      '🔔 Your ticket was updated';
+
+        const custActions = [
+          { type: 'Action.OpenUrl', title: '🔗 View in browser', url: `${process.env.HELPDESK_WEB_URL}/${ticket.id}` },
+          { type: 'Action.Submit', title: '✏️ Edit', data: { action: 'startEditTicket', ticketId: ticket.id } },
+          ...(ticketState !== 'closed'
+            ? [{ type: 'Action.Submit', title: '✅ Close', data: { action: 'closeTicket', ticketId: ticket.id } }]
+            : [])
+        ];
+
+        const custCard = {
           type: 'AdaptiveCard',
           body: [
-            {
-              type: 'TextBlock',
-              text: ticketState === 'new'
-                ? `📥 New Ticket Created`
-                : `🔔 Ticket Updated`,
-              weight: 'Bolder',
-              size: 'Medium',
-              wrap: true
-            },
-            {
-              type: 'TextBlock',
-              text: `**${ticket.title}**`,
-              wrap: true
-            },
-            {
-              type: 'TextBlock',
-              text: `#${ticket.id} — ${ticket.state}`,
-              spacing: 'None',
-              isSubtle: true,
-              wrap: true
-            },
-            {
-              type: 'TextBlock',
-              text: ticket.owner
-                ? `👨‍🔧 Assigned to ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
-                : '👨‍🔧 Unassigned',
-              spacing: 'None',
-              isSubtle: true,
-              wrap: true
-            }
-          ],
-          actions: [
-            {
-              type: 'Action.OpenUrl',
-              title: '🔗 View in browser',
-              url: `${process.env.HELPDESK_WEB_URL}/${ticket.id}`
-            },
-            ...(ticketState === 'new' ? [{
-              type: 'Action.Submit',
-              title: '✋ Claim',
-              data: {
-                action: 'claimTicket',
-                ticketId: ticket.id
-              }
-            }] : [{
-              type: 'Action.Submit',
-              title: '✏️ Edit',
-              data: { action: 'startEditTicket', ticketId: ticket.id }
-            }]),
-            {
-              type: 'Action.Submit',
-              title: '✅ Close',
-              data: {
-                action: 'closeTicket',
-                ticketId: ticket.id
-              }
-            }
-          ],
-          $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-          version: '1.4'
-        };
-
-        await ctx.sendActivity({
-          type: 'message',
-          attachments: [
-            {
-              contentType: 'application/vnd.microsoft.card.adaptive',
-              content: card
-            }
-          ]
-        });
-      });
-
-      context.log(`📤 Notified ${email}`);
-    } catch (err) {
-      context.log.warn(`⚠️ Failed to notify ${email}:`, err.message);
-    }
-  }
-
-  
-
-  // ✅ Signature verification
-  if (!signatureHeader || !signatureHeader.startsWith('sha1=')) {
-    context.log.warn('⛔ Missing or invalid signature header.');
-    context.res = { status: 401, body: 'Unauthorized' };
-    return;
-  }
-
-  const signatureValue = signatureHeader.slice(5); // remove "sha1="
-  const expectedHmac = crypto
-    .createHmac('sha1', SHARED_SECRET)
-    .update(rawBody)
-    .digest('hex');
-
-  //context.log('🔍 Signature header:', signatureValue);
-  //context.log('🔍 Computed HMAC:', expectedHmac);
-
-  if (!crypto.timingSafeEqual(Buffer.from(signatureValue), Buffer.from(expectedHmac))) {
-    context.log.warn('⛔ Signature mismatch.');
-    context.res = { status: 403, body: 'Invalid signature' };
-    return;
-  }
-
-  const updated_by = ticket.updated_by;
-
-  if (!updated_by) {
-    context.log.warn('⚠️ Missing updated_by in payload.');
-    context.res = { status: 200 };
-    return;
-  }
-
-  // 🧠 Build message
-  const actor = `${updated_by.firstname} ${updated_by.lastname}`;
-  const subject = article.subject || '(sin asunto)';
-  const body = article.body || '(sin contenido)';
-  const attachments = (article.attachments || [])
-    .map(att => `- [${att.filename}](${att.content_url})`)
-    .join('\n') || 'Ninguno';
-
-  const message = formatTicketUpdate({ ticket, article, updated_by });
-  const record = users[recipientEmail];
-
-  if (recipientEmail) {
-    if (!record?.reference?.user?.id || !record.reference?.conversation?.id) {
-      context.log.warn(`⚠️ No Teams reference found for ${recipientEmail}`);
-      context.res = { status: 202, body: `User ${recipientEmail} not registered.` };
-      return;
-    }
-
-    const reference = record.reference;
-
-    try {
-      await adapter.createConversation(reference, async (ctx) => {
-        const card = {
-          type: 'AdaptiveCard',
-          body: [
-            {
-              type: 'TextBlock',
-              text: ticketState === 'new'
-                ? `📥 Ticket Created`
-                : `🔔 Ticket Updated`,
-              weight: 'Bolder',
-              size: 'Medium',
-              wrap: true
-            },
-            {
-              type: 'TextBlock',
-              text: `**${ticket.title}**`,
-              wrap: true
-            },
-            {
-              type: 'TextBlock',
-              text: `#${ticket.id} — ${ticket.state || 'Open'}`,
-              spacing: 'None',
-              isSubtle: true,
-              wrap: true
-            },
-            {
-              type: 'TextBlock',
-              text: ticket.owner
+            { type: 'TextBlock', text: header, weight: 'Bolder', size: 'Medium', wrap: true },
+            { type: 'TextBlock', text: `**${ticket.title}**`, wrap: true },
+            { type: 'TextBlock', text: `#${ticket.id} — ${ticket.state}`, isSubtle: true, wrap: true },
+            { type: 'TextBlock', text: ticket.owner
                 ? `👨‍🔧 ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
-                : '👨‍🔧 Unassigned',
-              spacing: 'None',
-              isSubtle: true,
-              wrap: true
-            }
+                : '👨‍🔧 Unassigned', isSubtle: true, wrap: true }
+            { type:'TextBlock', text: content, wrap:true },
+            { type:'TextBlock', text:'**Attachments:**', wrap:true },
+            { type:'TextBlock', text: attachmentsList, wrap:true },
           ],
-          actions: [
-            {
-              type: 'Action.OpenUrl',
-              title: '🔗 View in browser',
-              url: `${process.env.HELPDESK_WEB_URL}/${ticket.id}`
-            },
-            {
-              type: 'Action.Submit',
-              title: '✏️ Edit',
-              data: {
-                action: 'startEditTicket',
-                ticketId: ticket.id
-              }
-            },
-            {
-              type: 'Action.Submit',
-              title: '✅ Close',
-              data: {
-                action: 'closeTicket',
-                ticketId: ticket.id
-              }
-            }
-          ],
+          actions: custActions,
           $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
           version: '1.4'
         };
-
-        await ctx.sendActivity({
-          type: 'message',
-          attachments: [
-            {
-              contentType: 'application/vnd.microsoft.card.adaptive',
-              content: card
-            }
-          ]
-        });
+        await ctx.sendActivity({ attachments: [{ contentType: 'application/vnd.microsoft.card.adaptive', content: custCard }] });
+        context.log(`📣 Customer notified: ${recipientEmail}`);
+      }).catch(err => {
+        context.log.error(`❌ Failed to notify customer:`, err.message);
       });
-      context.log(`✅ Teams message sent to ${recipientEmail}`);
-    } catch (error) {
-      context.log.error(`❌ Failed to send proactive message:`, error.message);
-      context.res = { status: 500, body: `Failed to notify user: ${error.message}` };
-      return;
     }
   } else {
-    context.log.warn("⚠️ No recipient email found");
+    context.log(`ℹ️ Customer skipped (sender=${article.sender})`);
   }
 
+  // Respond to the webhook
   context.res = {
     status: 200,
     body: 'Webhook procesado correctamente.'
