@@ -60,56 +60,53 @@ class TeamsBot extends ActivityHandler {
   constructor(conversationState) {
     super();
     this.onConversationUpdate(async (context, next) => {
-      console.log('📥 onConversationUpdate fired:', context.activity);
-      const { membersAdded, recipient, activity } = context;
+  const { activity } = context;
 
-      for (const member of membersAdded || []) {
-        console.log('👤 Processing member:', member);
-        const welcomeText = `👋 Hi ${member.name || 'there'}! I’m **OrbIT**, your helpdesk assistant.
+  console.log('📥 onConversationUpdate fired:', {
+    membersAdded: activity.membersAdded,
+    type: activity.type,
+    conversationType: activity.conversation?.conversationType
+  });
+
+  for (const member of activity.membersAdded || []) {
+    if (member.id === context.activity.recipient.id || member.id === context.activity.recipient.aadObjectId) {
+      console.log('ℹ️ Skipping bot self', member.id);
+      continue;
+    }
+
+    console.log('👤 Processing member:', member);
+
+    const teamsUserId = member.id;
+    let upn =
+      member.userPrincipalName ||
+      member.email ||
+      (member.aadObjectId
+        ? `${member.aadObjectId}@newlink-group.com`
+        : null);
+
+    if (!upn || !teamsUserId) {
+      console.warn('⚠️ Missing upn or teamsUserId:', { upn, teamsUserId });
+      continue;
+    }
+
+    const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
+    const reference = TurnContext.getConversationReference(activity);
+
+    console.log(`📥 Registering user ${upn} → ${zammadEmail}`);
+    await saveFullReference(zammadEmail, upn, reference);
+    await context.sendActivity(`👋 Hi there! I’m **OrbIT**, your helpdesk assistant.
 
 🔔 I’ll keep you updated on:
 • Ticket assignments  
 • Status changes  
 • Internal notes
 
-No need to check email — I’ve got you covered here in Teams.`;
-        // Skip the bot itself
-        if (member.id === context.activity.recipient.id) {
-          console.log('ℹ️ Skipping bot self');
-          continue;
-        }
-
-        const teamsUserId = member.id;
-
-        let upn =
-          member?.userPrincipalName ||
-          member?.email ||
-          (member?.aadObjectId
-            ? `${member.aadObjectId}@newlink-group.com`
-            : null);
-
-        console.log(`📥 Registering user: ${upn}, Teams ID: ${teamsUserId}`);
-
-        if (upn && teamsUserId) {
-          const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
-          const reference = TurnContext.getConversationReference(context.activity);
-
-          console.log(`📥 Bot added for user ${upn} → storing as ${zammadEmail}, Teams ID: ${teamsUserId}`);
-          await saveFullReference(zammadEmail, upn, reference);
-          await context.sendActivity(`👋 Welcome! I'm here to help with your tickets.`);
-        } else {
-          console.warn('⚠️ Could not resolve UPN or Teams ID on conversationUpdate:', {
-            upn,
-            teamsUserId,
-            member
-          });
-        }};
-      await next();
-    });
-    this.conversationState = conversationState;
-    this.draftAccessor    = conversationState.createProperty('ticketDraft');
-    this.onMessage(this.handleMessage.bind(this));
+No need to check email — I’ve got you covered here in Teams.`);
   }
+
+  await next();
+});
+
 
   async processAttachments(context, token, userEmail) {
     const attachmentTokens = [];
