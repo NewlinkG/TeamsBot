@@ -1,5 +1,5 @@
 // bot.js
-const { ActivityHandler, CardFactory } = require('botbuilder');
+const { ActivityHandler, CardFactory, TurnContext } = require('botbuilder');
 const {
   callAzureOpenAI,
   callAzureOpenAIStream,
