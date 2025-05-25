@@ -17,6 +17,18 @@ module.exports = async function (context, req) {
   const SHARED_SECRET = process.env.HELPDESK_WEBHOOK_SECRET; // define en App Settings
   const users = await getAllUsers();
   // Determine notification targets based on ticket state
+  const { article, ticket } = req.body;
+  const recipientEmail = ticket.customer?.email;
+  // 🧾 Raw body as string
+  const rawBody = req.rawBody;
+  const signatureHeader = req.headers['x-hub-signature'];
+
+  if (!article || !ticket || !recipientEmail) {
+    context.log.warn('⚠️ Incomplete payload:', req.body);
+    context.res = { status: 200 };
+    return;
+  }
+
   const ticketState = (ticket.state || '').toLowerCase();
   let agentsToNotify = [];
 
@@ -120,11 +132,9 @@ module.exports = async function (context, req) {
     }
   }
 
-  // 🧾 Raw body as string
-  const rawBody = req.rawBody;
+  
 
   // ✅ Signature verification
-  const signatureHeader = req.headers['x-hub-signature'];
   if (!signatureHeader || !signatureHeader.startsWith('sha1=')) {
     context.log.warn('⛔ Missing or invalid signature header.');
     context.res = { status: 401, body: 'Unauthorized' };
@@ -146,14 +156,11 @@ module.exports = async function (context, req) {
     return;
   }
 
-
-  // ✅ Valid request
-  const { article, ticket } = req.body;
   const updated_by = ticket.updated_by;
 
-  if (!article || !updated_by || !ticket) {
-    context.log.warn('⚠️ Incomplete payload:', req.body);
-    context.res = { status: 200 }; // Acknowledge but skip
+  if (!updated_by) {
+    context.log.warn('⚠️ Missing updated_by in payload.');
+    context.res = { status: 200 };
     return;
   }
 
@@ -166,7 +173,6 @@ module.exports = async function (context, req) {
     .join('\n') || 'Ninguno';
 
   const message = formatTicketUpdate({ ticket, article, updated_by });
-  const recipientEmail = ticket.customer.email; // or `created_by`, depending on your Zammad config
   const record = users[recipientEmail];
 
   if (recipientEmail) {
