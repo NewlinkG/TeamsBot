@@ -158,8 +158,13 @@ module.exports = async function (context, myTimer) {
     if (removed.length) {
       context.log(`🗑️ Removing pages no longer in Notion:`, removed);
       for (const id of removed) {
-        await rawContainer.deleteBlob(`page-${id}.json`);
-        await extractedContainer.deleteBlob(`txt-${id}-*.txt`);
+        const pageClient = rawContainer.getBlockBlobClient(`page-${id}.json`);
+        if (await pageClient.exists()) {
+          await pageClient.delete();
+        }
+        for await (const blob of extractedContainer.listBlobsFlat({ prefix: `txt-${id}-` })) {
+          await extractedContainer.deleteBlob(blob.name);
+        }
         await pineIndex.delete({ filter: { pageId: id } });
         context.log(`✅ Purged data for deleted page ${id}`);
       }
@@ -206,16 +211,28 @@ module.exports = async function (context, myTimer) {
       for (const name of existing) {
         if (!liveSet.has(name)) {
           context.log(`🗑️ Deleting orphaned blob ${name}`);
-          await rawContainer.deleteBlob(name);
+          // guard raw blob deletion
+          const blobClient = rawContainer.getBlockBlobClient(name);
+          if (await blobClient.exists()) {
+            await blobClient.delete();
+          }
           // also clean up extracted text
           if (name.startsWith('file-')) {
             const [, , blockId, ...rest] = name.split('-');
             const fn = rest.join('-');
-            await extractedContainer.deleteBlob(`txt-${pid}-${blockId}-${fn}.txt`).catch(()=>{});
+            // guard .txt deletion
+            const txtClient = extractedContainer.getBlockBlobClient(`txt-${pid}-${blockId}-${fn}.txt`);
+            if (await txtClient.exists()) {
+              await txtClient.delete();
+            }
           } else {
             const [, , blockId, ...rest] = name.split('-');
             const fn = rest.join('-');
-            await extractedContainer.deleteBlob(`ocr-${pid}-${blockId}-${fn}.txt`).catch(()=>{});
+            // guard .ocr deletion
+            const ocrClient = extractedContainer.getBlockBlobClient(`ocr-${pid}-${blockId}-${fn}.txt`);
+            if (await ocrClient.exists()) {
+              await ocrClient.delete();
+            }
           }
         }
       }
@@ -275,7 +292,10 @@ module.exports = async function (context, myTimer) {
           if (blk.type === 'text') {
             blockText = blk.text + '\n';
             const blobName = `txt-${pid}-${blk.id}.txt`;
-            const textClient = extractedContainer.getBlockBlobClient(blobName);
+            const textClient = extractedContainer.getBlockBlobClient(`txt-${pid}-${blockId}-${fn}.txt`);
+            if (await textClient.exists()) {
+              await textClient.delete();
+            }
             if (!(await textClient.exists())) {
               await textClient.upload(blockText, Buffer.byteLength(blockText));
             }
