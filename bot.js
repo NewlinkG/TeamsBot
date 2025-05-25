@@ -6,7 +6,8 @@ const {
   classifySupportRequest
 } = require('./openaiClient');
 const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket } = require('./ticketClient');
-const { MicrosoftAppCredentials } = require('botframework-connector'); // at the top
+const { MicrosoftAppCredentials } = require('botframework-connector');
+const { getTeamsId, saveIfChanged } = require('./teamsIdStore');
 const axios = require('axios');
 
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
@@ -54,8 +55,35 @@ const i18n = {
 
 
 class TeamsBot extends ActivityHandler {
+  
+
   constructor(conversationState) {
     super();
+    this.onConversationUpdate(async (context, next) => {
+      const { membersAdded, recipient, activity } = context;
+
+      for (const member of membersAdded || []) {
+        // Skip the bot itself
+        if (member.id === recipient.id) continue;
+
+        const teamsUserId = member.id;
+        const upn = activity.from?.userPrincipalName;
+
+        if (upn && teamsUserId) {
+          // Normalize email to Zammad domain format
+          const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
+
+          console.log(`📥 Bot added for user ${upn} → storing as ${zammadEmail}, Teams ID: ${teamsUserId}`);
+          await saveIfChanged(zammadEmail, teamsUserId, upn);
+        } else {
+          console.warn('⚠️ Could not capture email or Teams ID from conversationUpdate:', member);
+        }
+
+        await context.sendActivity(`👋 Hi! You’re all set to receive updates from OrbIT.`);
+      }
+
+      await next();
+    });
     this.conversationState = conversationState;
     this.draftAccessor    = conversationState.createProperty('ticketDraft');
     this.onMessage(this.handleMessage.bind(this));
@@ -129,6 +157,21 @@ class TeamsBot extends ActivityHandler {
     const locale = context.activity.locale || 'es-LA';
     const lang   = detectLanguageFromLocale(locale);
     const L      = i18n[lang];
+    const userId = context.activity.from.id;
+    const upn = context.activity.from.userPrincipalName;
+    const zammadEmail = upn?.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
+
+    if (zammadEmail && userId) {
+      const existing = await getTeamsId(zammadEmail);
+      if (!existing) {
+        console.log(`🆕 User not yet registered, saving ${zammadEmail}`);
+        await saveIfChanged(zammadEmail, userId, upn);
+      } else {
+        console.log(`✅ User ${zammadEmail} already registered`);
+      }
+    } else {
+      console.warn('⚠️ Missing UPN or Teams ID in handleMessage:', context.activity.from);
+    }
 
     // Load or initialize draft
     let draft = await this.draftAccessor.get(context, {

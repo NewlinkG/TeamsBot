@@ -1,7 +1,14 @@
 const crypto = require('crypto');
 const { sendProactiveTeamsMessage } = require('../proactiveHelper');
 const { formatTicketUpdate } = require('../formatTicketUpdate');
-const { sendGraphTeamsMessage } = require('../sendGraphTeamsMessage');
+const { BotFrameworkAdapter } = require('botbuilder');
+const { getTeamsId } = require('../teamsIdStore');
+const { MicrosoftAppId, MicrosoftAppPassword } = process.env; 
+
+const adapter = new BotFrameworkAdapter({
+  appId: MicrosoftAppId,
+  appPassword: MicrosoftAppPassword
+});
 
 /**
  * Azure Function entry point
@@ -58,22 +65,37 @@ module.exports = async function (context, req) {
   const recipientEmail = ticket.customer.email; // or `created_by`, depending on your Zammad config
 
   if (recipientEmail) {
+    const teamsId = await getTeamsId(recipientEmail);
+    if (!teamsId) {
+      context.log.warn(`⚠️ No Teams ID found for ${recipientEmail}`);
+      context.res = { status: 202, body: `User ${recipientEmail} not registered.` };
+      return;
+    }
+
+    const reference = {
+      serviceUrl: 'https://smba.trafficmanager.net/emea/', // adjust if needed
+      channelId: 'msteams',
+      conversation: { isGroup: false },
+      user: { id: teamsId },
+      bot: { id: MicrosoftAppId }
+    };
+
     try {
-        await sendGraphTeamsMessage(recipientEmail, '🔔 Your ticket has been updated.');
-        context.log(`✅ Message sent to ${recipientEmail}`);
+      await adapter.continueConversation(reference, async (ctx) => {
+        await ctx.sendActivity(`🔔 Your ticket "${ticket.title}" has been updated.`);
+      });
+      context.log(`✅ Teams message sent to ${recipientEmail}`);
     } catch (error) {
-        context.log.error(`❌ Failed to send Teams message to ${recipientEmail}:`, error.message);
-        context.res = { status: 500, body: `Failed to notify user: ${error.message}` };
-        return;
+      context.log.error(`❌ Failed to send proactive message:`, error.message);
+      context.res = { status: 500, body: `Failed to notify user: ${error.message}` };
+      return;
     }
-    } else {
+  } else {
     context.log.warn("⚠️ No recipient email found");
-    }
+  }
 
   // 🔔 Send this message (e.g., to Teams, email, queue, etc.)
   context.log('✅ Notificación preparada:\n', message);
-
-  // TODO: call your notifier here (e.g., sendToTeams(message))
 
   context.res = {
     status: 200,
