@@ -13,7 +13,6 @@
     "@azure/cognitiveservices-computervision": "^8.2.0",
     "@azure/ms-rest-js": "^2.4.2",
     "@pinecone-database/pinecone": "^6.0.0",
-    "node-fetch": "^2.6.12",
     "@azure-rest/ai-document-intelligence": "^1.0.0",
     "@microsoft/microsoft-graph-client": "^3.0.4",
     "isomorphic-fetch": "^3.0.0"
