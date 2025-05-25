@@ -184,7 +184,8 @@ No need to check email — I’ve got you covered here in Teams.`;
       const existing = await getTeamsId(zammadEmail);
       if (!existing) {
         console.log(`🆕 User not yet registered, saving ${zammadEmail}`);
-        await saveIfChanged(zammadEmail, userId, upn);
+        const reference = TurnContext.getConversationReference(context.activity);
+        await saveIfChanged(zammadEmail, reference.user.id, upn, reference.conversation.id);
       } else {
         console.log(`✅ User ${zammadEmail} already registered`);
       }
