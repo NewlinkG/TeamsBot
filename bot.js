@@ -1,4 +1,4 @@
-const { ActivityHandler, CardFactory, TurnContext } = require('botbuilder');
+const { ActivityHandler, CardFactory, TurnContext, TeamsInfo } = require('botbuilder');
 const {
   callAzureOpenAI,
   callAzureOpenAIStream,
@@ -61,13 +61,24 @@ class TeamsBot extends ActivityHandler {
       for (const member of activity.membersAdded || []) {
         if (member.id === botId) continue;
         const teamsUserId = member.id;
-        let upn =
-          member.userPrincipalName ||
-          member.email ||
-          (member.aadObjectId
-            ? `${member.aadObjectId}@newlink-group.com`
-            : null);
-        if (!upn) continue;
+        let upn = null;
+        try {
+          // Try Graph via TeamsInfo to get the true userPrincipalName or email
+          const details = await TeamsInfo.getMember(context, member.id);
+          upn = details.userPrincipalName || details.email || null;
+        } catch (err) {
+          console.warn('⚠️ Could not fetch member UPN via TeamsInfo:', err.message);
+        }
+
+        // Fallback on the raw activity fields if Graph didn’t return them
+        if (!upn && member.userPrincipalName) upn = member.userPrincipalName;
+        if (!upn && member.email)            upn = member.email;
+
+        // If we still don’t have a valid UPN/email, skip this user
+        if (!upn) {
+          console.warn('⚠️ Missing userPrincipalName or email; skipping user registration for member.id=', member.id);
+          continue;
+        }
         const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
         const reference = TurnContext.getConversationReference(activity);
         await saveFullReference(zammadEmail, upn, reference);
