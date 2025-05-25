@@ -15,10 +15,12 @@ const adapter = new BotFrameworkAdapter({
  */
 module.exports = async function (context, req) {
   const SHARED_SECRET = process.env.HELPDESK_WEBHOOK_SECRET; // define en App Settings
+  context.log('🔔 Webhook received:', JSON.stringify(req.body, null, 2));
   const users = await getAllUsers();
   // Determine notification targets based on ticket state
   const { article, ticket } = req.body;
   const recipientEmail = ticket.customer?.email;
+  context.log(`🔍 ticket.id=${ticket.id}, state=${ticket.state}, channel=${article.type}, customer=${recipientEmail}`);
   // 🧾 Raw body as string
   const rawBody = req.rawBody;
   const signatureHeader = req.headers['x-hub-signature'];
@@ -42,19 +44,23 @@ module.exports = async function (context, req) {
     );
   } else if (ticket.owner?.email) {
     // Notify only the owner
+    context.log('🔍 Branch: TICKET UPDATE; notify only the owner');
     agentsToNotify = [ticket.owner.email];
+    context.log(`👥 agentsToNotify: ${agentsToNotify.join(', ')}`);
   }
 
   // Loop over selected recipients and send notification
   for (const email of agentsToNotify) {
     const normalized = email.toLowerCase();
     const record = users[normalized];
+    context.log(`🛠️  Processing agent '${email}' → record:${record ? 'yes' : 'no'}`);
 
     if (!record?.reference?.user?.id || !record.reference?.conversation?.id) {
       context.log(`ℹ️ Skipping ${email} — no Teams reference`);
       continue;
     }
-
+    
+    context.log(`   ✔ Sending Teams card to ${email}`);
     try {
       await adapter.continueConversation(record.reference, async (ctx) => {
         const card = {
