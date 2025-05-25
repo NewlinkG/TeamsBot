@@ -164,8 +164,8 @@ async function addCommentToTicket(ticketId, comment, userEmail, attachmentTokens
   }
 
   const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}`;
-  console.log('📎 Tokens:', attachmentTokens);
-  console.log('Posting comment to Zammad:', ticketId, JSON.stringify(payload, null, 2));
+  //console.log('📎 Tokens:', attachmentTokens);
+  //console.log('Posting comment to Zammad:', ticketId, JSON.stringify(payload, null, 2));
   const resp = await axios.put(url, payload, { headers });
   return resp.data;
 }

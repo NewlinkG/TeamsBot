@@ -271,9 +271,6 @@ module.exports = async function (context, req) {
     context.log.warn("⚠️ No recipient email found");
   }
 
-  // 🔔 Send this message (e.g., to Teams, email, queue, etc.)
-  context.log('✅ Notificación preparada:\n', message);
-
   context.res = {
     status: 200,
     body: 'Webhook procesado correctamente.'
