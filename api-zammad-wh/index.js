@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const { sendProactiveTeamsMessage } = require('../proactiveHelper');
 const { formatTicketUpdate } = require('../formatTicketUpdate');
 const { BotFrameworkAdapter } = require('botbuilder');
 const { MicrosoftAppId, MicrosoftAppPassword } = process.env; 
