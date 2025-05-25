@@ -60,6 +60,7 @@ class TeamsBot extends ActivityHandler {
   constructor(conversationState) {
     super();
     this.onConversationUpdate(async (context, next) => {
+      console.log('📥 onConversationUpdate fired:', context.activity);
       const { membersAdded, recipient, activity } = context;
 
       for (const member of membersAdded || []) {
