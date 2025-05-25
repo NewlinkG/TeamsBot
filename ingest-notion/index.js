@@ -1,4 +1,4 @@
-console.log('🔧 ingest-notion module loaded');
+context.log('🔧 ingest-notion module loaded');
 
 const { Client: NotionClient }      = require('@notionhq/client');
 const { BlobServiceClient }         = require('@azure/storage-blob');
@@ -15,8 +15,8 @@ const fs                            = require('fs/promises');
 const fsSync                        = require('fs');
 const fetch                         = require('node-fetch');
 
-module.exports = async function (context, myTimer) {
-  context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
+module.exports = async function (context, req) {
+  console.log('⏱️ ingest-notion triggered at', new Date().toISOString());
   try {
     const E = key => { const v = process.env[key]; if (!v) throw new Error(`Missing env var: ${key}`); return v; };
 
