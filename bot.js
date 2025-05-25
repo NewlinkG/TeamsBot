@@ -7,7 +7,7 @@ const {
 } = require('./openaiClient');
 const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket } = require('./ticketClient');
 const { MicrosoftAppCredentials } = require('botframework-connector');
-const { getReference } = require('./teamsIdStore');
+const { getReference, saveFullReference  } = require('./teamsIdStore');
 const axios = require('axios');
 
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
