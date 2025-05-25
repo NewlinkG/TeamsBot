@@ -19,6 +19,11 @@ async function ensureCacheLoaded() {
   }
 }
 
+async function getReference(email) {
+  await ensureCacheLoaded();
+  return inMemoryCache[email]?.reference || null;
+}
+
 // Utility: Stream → string
 async function streamToString(readableStream) {
   return new Promise((resolve, reject) => {
@@ -46,6 +51,11 @@ async function loadCache() {
       throw err;
     }
   }
+}
+
+async function getTeamsId(email) {
+  await ensureCacheLoaded();
+  return inMemoryCache[email]?.teamsId || null;
 }
 
 // Public: Save only if changed
@@ -91,5 +101,6 @@ async function getAllUsers() {
 
 module.exports = {
   saveIfChanged,
-  getAllUsers
+  getAllUsers,
+  getReference
 };

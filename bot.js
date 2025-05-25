@@ -7,7 +7,7 @@ const {
 } = require('./openaiClient');
 const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket } = require('./ticketClient');
 const { MicrosoftAppCredentials } = require('botframework-connector');
-const { getTeamsId, saveIfChanged } = require('./teamsIdStore');
+const { getReference } = require('./teamsIdStore');
 const axios = require('axios');
 
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
@@ -181,7 +181,8 @@ No need to check email — I’ve got you covered here in Teams.`;
       : fallbackEmail;
 
     if (zammadEmail && userId) {
-      const existing = await getTeamsId(zammadEmail);
+      const reference = await getReference(zammadEmail);
+      const existing = reference?.user?.id || null;
       if (!existing) {
         console.log(`🆕 User not yet registered, saving ${zammadEmail}`);
         const reference = TurnContext.getConversationReference(context.activity);
