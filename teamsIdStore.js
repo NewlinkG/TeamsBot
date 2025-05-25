@@ -53,11 +53,6 @@ async function loadCache() {
   }
 }
 
-async function getTeamsId(email) {
-  await ensureCacheLoaded();
-  return inMemoryCache[email]?.teamsId || null;
-}
-
 // Public: Save only if changed
 async function saveIfChanged(email, teamsId, upn = null, conversationId = null) {
   await ensureCacheLoaded();
