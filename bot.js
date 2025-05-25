@@ -75,8 +75,12 @@ No need to check email — I’ve got you covered here in Teams.`;
         if (member.id === recipient.id) continue;
 
         const teamsUserId = member.id;
-        const upn = activity.from?.email;
-        const reference = TurnContext.getConversationReference(context.activity);
+        let upn = activity.from?.userPrincipalName || activity.from?.email;
+        if (!upn) {
+          // fallback to generated email
+          upn = `${activity.from.name?.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+        }
+        console.log(`📥 Registering Teams user: ${upn}`);
 
         if (upn && teamsUserId) {
           // Normalize email to Zammad domain format
