@@ -3,8 +3,7 @@ const { formatTicketUpdate } = require('../formatTicketUpdate');
 const { BotFrameworkAdapter } = require('botbuilder');
 const { MicrosoftAppId, MicrosoftAppPassword } = process.env; 
 const { getAllUsers } = require('../teamsIdStore');
-const users = await getAllUsers();
-const record = users[recipientEmail];
+
 
 const adapter = new BotFrameworkAdapter({
   appId: MicrosoftAppId,
@@ -16,6 +15,7 @@ const adapter = new BotFrameworkAdapter({
  */
 module.exports = async function (context, req) {
   const SHARED_SECRET = process.env.HELPDESK_WEBHOOK_SECRET; // define en App Settings
+  const users = await getAllUsers();
 
   // 🧾 Raw body as string
   const rawBody = req.rawBody;
@@ -64,6 +64,7 @@ module.exports = async function (context, req) {
 
   const message = formatTicketUpdate({ ticket, article, updated_by });
   const recipientEmail = ticket.customer.email; // or `created_by`, depending on your Zammad config
+  const record = users[recipientEmail];
 
   if (recipientEmail) {
     if (!record?.reference?.user?.id || !record.reference?.conversation?.id) {
