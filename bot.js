@@ -91,7 +91,8 @@ class TeamsBot extends ActivityHandler {
         }
         await context.sendActivity(`👋 Hi there! I’m **OrbIT**, your helpdesk assistant.\n\n
 
-🔔 I’ll keep you updated on:
+🔔 I’ll keep you updated on:\n\n
+
 • Ticket assignments  
 • Status changes  
 • Internal notes\n\n

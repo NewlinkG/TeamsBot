@@ -149,7 +149,7 @@ module.exports = async function (context, req) {
             { type: 'TextBlock', text: `#${ticket.id} — ${ticket.state}`, isSubtle: true, wrap: true },
             { type: 'TextBlock', text: ticket.owner
                 ? `👨‍🔧 ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
-                : '👨‍🔧 Unassigned', isSubtle: true, wrap: true }
+                : '👨‍🔧 Unassigned', isSubtle: true, wrap: true },
             { type:'TextBlock', text: content, wrap:true },
             { type:'TextBlock', text:'**Attachments:**', wrap:true },
             { type:'TextBlock', text: attachmentsList, wrap:true },
