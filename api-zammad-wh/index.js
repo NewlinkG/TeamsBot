@@ -101,7 +101,11 @@ module.exports = async function (context, req) {
                 action: 'claimTicket',
                 ticketId: ticket.id
               }
-            }] : []),
+            }] : [{
+              type: 'Action.Submit',
+              title: '✏️ Edit',
+              data: { action: 'startEditTicket', ticketId: ticket.id }
+            }]),
             {
               type: 'Action.Submit',
               title: '✅ Close',
