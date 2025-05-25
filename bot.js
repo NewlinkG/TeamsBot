@@ -67,7 +67,7 @@ class TeamsBot extends ActivityHandler {
         if (member.id === recipient.id) continue;
 
         const teamsUserId = member.id;
-        const upn = activity.from?.userPrincipalName;
+        const upn = activity.from?.email;
 
         if (upn && teamsUserId) {
           // Normalize email to Zammad domain format
@@ -159,7 +159,12 @@ class TeamsBot extends ActivityHandler {
     const L      = i18n[lang];
     const userId = context.activity.from.id;
     const upn = context.activity.from.userPrincipalName;
-    const zammadEmail = upn?.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
+    const fallbackEmail = context.activity.from.email
+      || `${context.activity.from.name.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+
+    const zammadEmail = upn
+      ? upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com')
+      : fallbackEmail;
 
     if (zammadEmail && userId) {
       const existing = await getTeamsId(zammadEmail);
