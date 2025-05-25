@@ -1,4 +1,3 @@
-// bot.js
 const { ActivityHandler, CardFactory, TurnContext } = require('botbuilder');
 const {
   callAzureOpenAI,
@@ -7,7 +6,7 @@ const {
 } = require('./openaiClient');
 const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket } = require('./ticketClient');
 const { MicrosoftAppCredentials } = require('botframework-connector');
-const { getReference, saveFullReference  } = require('./teamsIdStore');
+const { getReference, saveFullReference } = require('./teamsIdStore');
 const axios = require('axios');
 
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
@@ -53,48 +52,26 @@ const i18n = {
   }
 };
 
-
 class TeamsBot extends ActivityHandler {
-  
-
   constructor(conversationState) {
     super();
     this.onConversationUpdate(async (context, next) => {
-  const { activity } = context;
-  const botId = context.activity.recipient.id;
-
-  console.log('📥 onConversationUpdate fired:', {
-    membersAdded: activity.membersAdded,
-    type: activity.type,
-    conversationType: activity.conversation?.conversationType
-  });
-
-  for (const member of activity.membersAdded || []) {
-    if (member.id === botId) {
-      console.log('ℹ️ Skipping bot self:', member.id);
-      continue;
-    }
-    console.log('👤 Processing member:', member);
-
-    const teamsUserId = member.id;
-    let upn =
-      member.userPrincipalName ||
-      member.email ||
-      (member.aadObjectId
-        ? `${member.aadObjectId}@newlink-group.com`
-        : null);
-
-    if (!upn || !teamsUserId) {
-      console.warn('⚠️ Missing upn or teamsUserId:', { upn, teamsUserId });
-      continue;
-    }
-
-    const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
-    const reference = TurnContext.getConversationReference(activity);
-
-    console.log(`📥 Registering user ${upn} → ${zammadEmail}`);
-    await saveFullReference(zammadEmail, upn, reference);
-    await context.sendActivity(`👋 Hi there! I’m **OrbIT**, your helpdesk assistant.
+      const { activity } = context;
+      const botId = activity.recipient.id;
+      for (const member of activity.membersAdded || []) {
+        if (member.id === botId) continue;
+        const teamsUserId = member.id;
+        let upn =
+          member.userPrincipalName ||
+          member.email ||
+          (member.aadObjectId
+            ? `${member.aadObjectId}@newlink-group.com`
+            : null);
+        if (!upn) continue;
+        const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
+        const reference = TurnContext.getConversationReference(activity);
+        await saveFullReference(zammadEmail, upn, reference);
+        await context.sendActivity(`👋 Hi there! I’m **OrbIT**, your helpdesk assistant.
 
 🔔 I’ll keep you updated on:
 • Ticket assignments  
@@ -102,51 +79,44 @@ class TeamsBot extends ActivityHandler {
 • Internal notes
 
 No need to check email — I’ve got you covered here in Teams.`);
+      }
+      await next();
+    });
+
+    this.conversationState = conversationState;
+    this.draftAccessor    = conversationState.createProperty('ticketDraft');
+    this.onMessage(this.handleMessage.bind(this));
   }
 
-  await next();
-});
-
-
-  const processAttachments = async (context, token, userEmail) => {
+  async processAttachments(context, token, userEmail) {
     const attachmentTokens = [];
     let commentNote = '';
-
     const teamsFiles = context.activity.attachments || [];
-
     for (const file of teamsFiles) {
       if (!file.contentUrl) {
         console.warn("📎 Attachment has no contentUrl:", file);
         continue;
       }
-
       if (file.contentUrl.includes('sharepoint.com') || file.contentUrl.includes('my.sharepoint.com')) {
-        console.warn(`📎 Skipping OneDrive/SharePoint file: ${file.name}`);
         const linkNote = `🔗 Archivo compartido: ${file.contentUrl}`;
         commentNote += `\n\n${linkNote}`;
         continue;
       }
-
       try {
-        console.log("📎 Trying to download:", file.name, file.contentUrl);
         const fileRes = await axios.get(file.contentUrl, {
           responseType: 'arraybuffer',
           headers: { Authorization: `Bearer ${token}` }
         });
-
         const buffer = Buffer.from(fileRes.data);
         const tokenId = await uploadAttachment(
           { buffer, originalname: file.name || 'attachment' },
           userEmail
         );
-
         attachmentTokens.push(tokenId);
       } catch (err) {
         console.warn(`Attachment upload failed: ${file.name || 'undefined'}`, err.message);
       }
     }
-
-    // Fallback to extracting inline images if no valid attachments
     if (attachmentTokens.length === 0 && context.activity.textFormat === 'html') {
       const html = context.activity.text || '';
       const extracted = await this.extractInlineImagesFromHtml(html, token, userEmail);
@@ -156,8 +126,6 @@ No need to check email — I’ve got you covered here in Teams.`);
         console.warn("⚠️ No se encontraron imágenes embebidas o fallaron todas.");
       }
     }
-
-    // Detect embedded SharePoint links in HTML content
     if (context.activity.textFormat === 'html') {
       const html = context.activity.text || '';
       const linkMatches = [...html.matchAll(/<a[^>]+href="([^"]+sharepoint\.com[^"]+)"/g)];
@@ -167,9 +135,8 @@ No need to check email — I’ve got you covered here in Teams.`);
         commentNote += `\n\n${linkNote}`;
       }
     }
-
     return { attachmentTokens, commentNote: commentNote.trim() };
-  }}
+  }
 
   async handleMessage(context, next) {
     const text   = (context.activity.text || '').trim();
@@ -179,13 +146,11 @@ No need to check email — I’ve got you covered here in Teams.`);
     const userId = context.activity.from.id;
     let upn = context.activity.from.userPrincipalName;
     if (!upn) {
-      // fallback: use email or generated format
       upn = context.activity.from.email
         || `${context.activity.from.name.replace(/\s+/g, '.').toLowerCase()}@newlinkcorp.com`;
     }
     const fallbackEmail = context.activity.from.email
       || `${context.activity.from.name.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
-
     const zammadEmail = upn
       ? upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com')
       : fallbackEmail;
@@ -195,74 +160,40 @@ No need to check email — I’ve got you covered here in Teams.`);
       if (!existingRef) {
         const fullRef = TurnContext.getConversationReference(context.activity);
         await saveFullReference(zammadEmail, upn, fullRef);
-      } else {
-        console.log(`✅ User ${zammadEmail} already registered`);
       }
-    } else {
-      console.warn('⚠️ Missing UPN or Teams ID in handleMessage:', context.activity.from);
     }
 
-    // Load or initialize draft
-    let draft = await this.draftAccessor.get(context, {
-      state: 'idle',
-      history: []
-    });
+    let draft = await this.draftAccessor.get(context, { state: 'idle', history: [] });
+    const value = context.activity.value;
 
     // 1) CONFIRM / CANCEL flows
-    const value = context.activity.value;
-    if (value && value.action === 'claimTicket') {
-      const ticketId = value.ticketId;
-      const userName = context.activity.from.name;
-      const userEmail = context.activity.from.email || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
-
-      const claimMessage = `🙋‍♂️ Ticket claimed by ${userName} via Teams`;
-
-      try {
-        // Set the owner and add a comment in Zammad
-        await addCommentToTicket(ticketId, claimMessage, userEmail);
-
-        await context.sendActivity(`✅ Ticket #${ticketId} has been assigned to you and a comment was added.`);
-      } catch (err) {
-        console.error('❌ Failed to claim ticket:', err.message);
-        await context.sendActivity(`❌ Could not claim ticket: ${err.message}`);
-      }
-
-      return;
-    }
-
     if (value && value.action === 'confirmTicket') {
       const cardLang = value.lang || lang;
       const LC = i18n[cardLang];
       const { title, summary } = value;
-
       const userName  = context.activity.from.name;
       const userEmail = context.activity.from.email
         || `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
-
       const ticket = await createTicket({ title, description: summary, userName, userEmail });
-
       const successLine =
         `✅ [${LC.ticketLabel} #${ticket.id}]` +
         `(${helpdeskWebUrl}/${ticket.id}) ${LC.createdSuffix}`;
-
       const finalCard = {
         type: 'AdaptiveCard',
         body: [
-          { type:'TextBlock', text: title,   weight:'Bolder', wrap:true },
-          { type:'TextBlock', text: summary, wrap:true },
-          { type:'TextBlock', text: successLine, wrap:true }
+          { type: 'TextBlock', text: title, weight: 'Bolder', wrap: true },
+          { type: 'TextBlock', text: summary, wrap: true },
+          { type: 'TextBlock', text: successLine, wrap: true }
         ],
         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-        version:'1.4'
+        version: '1.4'
       };
-
       await context.updateActivity({
-        id:          context.activity.replyToId,
-        type:        'message',
+        id: context.activity.replyToId,
+        type: 'message',
         attachments: [ CardFactory.adaptiveCard(finalCard) ]
       });
-
-      draft = { state:'idle', history:[] };
+      draft = { state: 'idle', history: [] };
       await this.draftAccessor.set(context, draft);
       return;
     }
@@ -271,35 +202,24 @@ No need to check email — I’ve got you covered here in Teams.`);
       const cardLang = value.lang || lang;
       const LC = i18n[cardLang];
       const { title, summary } = value;
-
       const cancelCard = {
         type: 'AdaptiveCard',
         body: [
-          { type:'TextBlock', text: title,   weight:'Bolder', wrap:true },
-          { type:'TextBlock', text: summary, wrap:true },
-          { type:'TextBlock', text: LC.cancelled, wrap:true }
+          { type: 'TextBlock', text: title, weight: 'Bolder', wrap: true },
+          { type: 'TextBlock', text: summary, wrap: true },
+          { type: 'TextBlock', text: LC.cancelled, wrap: true }
         ],
         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-        version:'1.4'
+        version: '1.4'
       };
-
-      await context.updateActivity({
-        id:          context.activity.replyToId,
-        type:        'message',
-        attachments: [ CardFactory.adaptiveCard(cancelCard) ]
-      });
-
-      draft = { state:'idle', history:[] };
+      await context.updateActivity({ id: context.activity.replyToId, type: 'message', attachments: [ CardFactory.adaptiveCard(cancelCard) ] });
+      draft = { state: 'idle', history: [] };
       await this.draftAccessor.set(context, draft);
       return;
     }
 
     if (value && value.action === 'startEditTicket') {
-      draft = {
-        state: 'editing',
-        ticketId: value.ticketId,
-        history: []
-      };
+      draft = { state: 'editing', ticketId: value.ticketId, history: [] };
       await this.draftAccessor.set(context, draft);
       return await context.sendActivity(`✏️ What would you like to add to ticket #${value.ticketId}? You can also upload a file or screenshot.`);
     }
@@ -310,29 +230,21 @@ No need to check email — I’ve got you covered here in Teams.`);
       const userName = context.activity.from.name;
       const userEmail = context.activity.from.email
         || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
-
       await closeTicket(ticketId, userEmail, cardLang);
       const LC = i18n[cardLang] || i18n['es'];
       const message = LC.ticketClosed.replace('{number}', value.ticketId);
       return await context.sendActivity(message);
     }
 
-
     // 2) IN-FLIGHT DRAFT (JSON loop)
     if (draft.state === 'awaiting') {
-      draft.history.push({ role:'user', content:text });
-
+      draft.history.push({ role: 'user', content: text });
       const userName  = context.activity.from.name;
       const userEmail = context.activity.from.email
         || `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
-
-      const conversationLog = draft.history
-        .map(m => `[${m.role}] ${m.content}`)
-        .join('\n');
-
-      // ask the LLM to include "lang" in its JSON
+      const conversationLog = draft.history.map(m => `[${m.role}] ${m.content}`).join('\n');
       const systemPrompt = {
-        role:'system',
+        role: 'system',
         content:
           `Eres OrbIT, asistente de IA que recopila información para un ticket de soporte. ` +
           `Respondes siempre en el mismo idioma en el que habla el usuario en cada mensaje. ` +
@@ -344,76 +256,39 @@ No need to check email — I’ve got you covered here in Teams.`);
           `{"done":false,"question":"…","lang":"<iso>"} ` +
           `o {"done":true,"title":"…","summary":"…","lang":"<iso>"}.`
       };
-      const userPrompt = { role:'user', content:`Historial:\n${conversationLog}` };
-
-      const raw = await callAzureOpenAI([ systemPrompt, userPrompt ], lang, { withRetrieval: true, topK: 5 });
+      const userPrompt = { role: 'user', content: `Historial:\n${conversationLog}` };
+      const raw = await callAzureOpenAI([systemPrompt, userPrompt], lang, { withRetrieval: true, topK: 5 });
       let obj;
-      try {
-        obj = JSON.parse(raw.trim());
-      } catch {
-        return await context.sendActivity(L.parseError);
-      }
-
-      // still gathering
+      try { obj = JSON.parse(raw.trim()); } catch { return await context.sendActivity(L.parseError); }
       if (!obj.done) {
-        draft.history.push({ role:'assistant', content:obj.question });
+        draft.history.push({ role: 'assistant', content: obj.question });
         await this.draftAccessor.set(context, draft);
         return await context.sendActivity(obj.question);
       }
-
-      // done → **use obj.lang** here, not the original `lang`
       const cardLang = obj.lang || lang;
-      const LC = i18n[cardLang];
-
-      draft = { state:'idle', history:[] };
+      const LC2 = i18n[cardLang];
+      draft = { state: 'idle', history: [] };
       await this.draftAccessor.set(context, draft);
-
       const confirmCard = {
         type: 'AdaptiveCard',
         body: [
-          { type:'TextBlock', text: LC.confirmPrompt, wrap:true },
-          { type:'TextBlock', text:`**${obj.title}**`, wrap:true },
-          { type:'TextBlock', text: obj.summary, wrap:true }
+          { type: 'TextBlock', text: LC2.confirmPrompt, wrap: true },
+          { type: 'TextBlock', text: `**${obj.title}**`, wrap: true },
+          { type: 'TextBlock', text: obj.summary, wrap: true }
         ],
         actions: [
-          {
-            type:'Action.Submit',
-            title: LC.confirm,
-            data:  {
-              action: 'confirmTicket',
-              title:  obj.title,
-              summary:obj.summary,
-              lang:    cardLang     // carry forward the lang
-            }
-          },
-          {
-            type:'Action.Submit',
-            title: LC.cancel,
-            data:  {
-              action: 'cancelTicket',
-              title:  obj.title,
-              summary:obj.summary,
-              lang:    cardLang
-            }
-          }
+          { type: 'Action.Submit', title: LC2.confirm, data: { action: 'confirmTicket', title: obj.title, summary: obj.summary, lang: cardLang } },
+          { type: 'Action.Submit', title: LC2.cancel, data: { action: 'cancelTicket', title: obj.title, summary: obj.summary, lang: cardLang } }
         ],
         $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-        version:'1.4'
+        version: '1.4'
       };
-
-      return await context.sendActivity({
-        attachments: [ CardFactory.adaptiveCard(confirmCard) ]
-      });
+      return await context.sendActivity({ attachments: [CardFactory.adaptiveCard(confirmCard)] });
     }
 
     if (draft.state === 'editing') {
-      let comment = text?.trim() || '';
+      let comment = text.trim();
       const ticketId = draft.ticketId;
-
-      const userName  = context.activity.from.name;
-      const userEmail = context.activity.from.email
-        || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
-
       const teamsFiles = context.activity.attachments || [];
       if (teamsFiles.length === 0) {
         await context.sendActivity("⚠️ No attachments found in your message.");
@@ -423,29 +298,20 @@ No need to check email — I’ve got you covered here in Teams.`);
       const token = await creds.getToken();
       const { attachmentTokens, commentNote } = await this.processAttachments(context, token, userEmail);
       comment = `${comment}\n\n${commentNote}`.trim();
-
       if (!comment && attachmentTokens.length === 0) {
         return await context.sendActivity("✏️ Escribe un comentario o adjunta un archivo.");
       }
-
       await addCommentToTicket(ticketId, comment || "Archivo adjunto desde Teams.", userEmail, attachmentTokens);
-
       await this.draftAccessor.set(context, { state: 'idle', history: [] });
-      return await context.sendActivity(`✅ Your comment has been added to ticket #${draft.ticketId}.`);
+      return await context.sendActivity(`✅ Your comment has been added to ticket #${ticketId}.`);
     }
-
 
     // 3) INTENT CLASSIFICATION
     let info;
     try {
-      if (value && value.action === 'listTksPage') {
-        info = { intent: 'listTksPage' };
-      } else {
-        info = await classifySupportRequest(text, lang);
-      }
+      info = (value && value.action === 'listTksPage') ? { intent: 'listTksPage' } : await classifySupportRequest(text, lang);
     } catch {
-      // fallback to streaming chat
-      await context.sendActivity({ type:'typing' });
+      await context.sendActivity({ type: 'typing' });
       let reply = '';
       await callAzureOpenAIStream(text, lang, chunk => reply += chunk, { withRetrieval: true, topK: 5 });
       return await context.sendActivity(reply);
@@ -453,69 +319,47 @@ No need to check email — I’ve got you covered here in Teams.`);
 
     // 4) KICK-OFF SUPPORT FLOW
     switch (info.intent) {
-      case 'createTk': {
+      case 'createTk':
         draft = { state: 'awaiting', history: [] };
         draft.history.push({ role: 'assistant', content: `Resumen inicial: ${info.summary}` });
         await this.draftAccessor.set(context, draft);
-
+        await context.sendActivity({ type: 'typing' });
+        let firstQ = '';
         const firstPrompt =
           `Eres OrbIT, recopila info para un ticket de soporte: "${info.summary}". ` +
           `Respondes siempre en el mismo idioma en que te habla el usuario.` +
           `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si te lo piden.` +
           `Generas el summary hablando en primera persona.` +
           `Pregunta solo detalles del problema (no pidas nombre/correo).`;
-
-        await context.sendActivity({ type: 'typing' });
-        let firstQ = '';
-        await callAzureOpenAIStream(firstPrompt, lang, delta => firstQ += delta, { withRetrieval: true, topK: 5 });
-
+        await callAzureOpenAIStream(firstPrompt, lang, chunk => firstQ += chunk, { withRetrieval: true, topK: 5 });
         draft.history.push({ role: 'assistant', content: firstQ });
         await this.draftAccessor.set(context, draft);
         return await context.sendActivity(firstQ);
-      }
-
-      case 'listTks': {
+      case 'listTks':
         return await this.renderTicketListCard(context, 0, false);
-      }
-
-
-      case 'listTksPage': {
-        const value = context.activity.value || {};
+      case 'listTksPage':
         const page = value.page || 0;
         const showClosed = !!value.showClosed;
         return await this.renderTicketListCard(context, page, showClosed);
-      }
-
-
-      case 'editTk': {
+      case 'editTk':
         if (info.ticketId) {
-          const userName  = context.activity.from.name;
-          const userEmail = `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
-          let comment = value.comment?.trim() || '';
-
-          const creds = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
-          const token = await creds.getToken();
-          const { attachmentTokens, commentNote } = await this.processAttachments(context, token, userEmail);
-          comment = `${comment}\n\n${commentNote}`.trim();
-
-          if (!comment && attachmentTokens.length === 0) {
+          const creds2 = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
+          const token2 = await creds2.getToken();
+          const { attachmentTokens, commentNote } = await this.processAttachments(context, token2, userEmail);
+          let comment2 = value.comment?.trim() || '';
+          comment2 = `${comment2}\n\n${commentNote}`.trim();
+          if (!comment2 && attachmentTokens.length === 0) {
             return await context.sendActivity("✏️ Escribe un comentario o adjunta un archivo.");
           }
-
-          await addCommentToTicket(info.ticketId, comment, userEmail, attachmentTokens);
+          await addCommentToTicket(info.ticketId, comment2, userEmail, attachmentTokens);
           return await context.sendActivity(`📝 Comentario agregado al ticket #${info.ticketId}${attachmentTokens.length ? ' con archivo(s).' : '.'}`);
         }
         break;
-      }
-
-
-      default: {
-        await context.sendActivity({ type: 'typing' })
-        const prompt = text;
-        let reply = '';
-        await callAzureOpenAIStream(text, lang, chunk => reply += chunk, { withRetrieval: true, topK: 5 });
-        return await context.sendActivity(reply);
-      }
+      default:
+        await context.sendActivity({ type: 'typing' });
+        let reply2 = '';
+        await callAzureOpenAIStream(text, lang, chunk => reply2 += chunk, { withRetrieval: true, topK: 5 });
+        return await context.sendActivity(reply2);
     }
   }
 
