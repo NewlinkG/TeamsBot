@@ -158,7 +158,12 @@ class TeamsBot extends ActivityHandler {
     const lang   = detectLanguageFromLocale(locale);
     const L      = i18n[lang];
     const userId = context.activity.from.id;
-    const upn = context.activity.from.userPrincipalName;
+    let upn = context.activity.from.userPrincipalName;
+    if (!upn) {
+      // fallback: use email or generated format
+      upn = context.activity.from.email
+        || `${context.activity.from.name.replace(/\s+/g, '.').toLowerCase()}@newlinkcorp.com`;
+    }
     const fallbackEmail = context.activity.from.email
       || `${context.activity.from.name.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
 
