@@ -76,27 +76,30 @@ No need to check email — I’ve got you covered here in Teams.`;
         if (member.id === recipient.id) continue;
 
         const teamsUserId = member.id;
-        let upn = activity.from?.userPrincipalName || activity.from?.email;
-        if (!upn) {
-          // fallback to generated email
-          upn = `${activity.from.name?.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
-        }
-        console.log(`📥 Registering Teams user: ${upn}`);
+
+        let upn =
+          member?.userPrincipalName ||
+          member?.email ||
+          (member?.aadObjectId
+            ? `${member.aadObjectId}@newlink-group.com`
+            : null);
+
+        console.log(`📥 Registering user: ${upn}, Teams ID: ${teamsUserId}`);
 
         if (upn && teamsUserId) {
-          // Normalize email to Zammad domain format
           const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
+          const reference = TurnContext.getConversationReference(context.activity);
 
           console.log(`📥 Bot added for user ${upn} → storing as ${zammadEmail}, Teams ID: ${teamsUserId}`);
-          const reference = TurnContext.getConversationReference(context.activity);
           await saveFullReference(zammadEmail, upn, reference);
-
-          await context.sendActivity(welcomeText);
+          await context.sendActivity(`👋 Welcome! I'm here to help with your tickets.`);
         } else {
-          console.warn('⚠️ Could not capture email or Teams ID from conversationUpdate:', member);
-        }
-      }
-
+          console.warn('⚠️ Could not resolve UPN or Teams ID on conversationUpdate:', {
+            upn,
+            teamsUserId,
+            member
+          });
+        }};
       await next();
     });
     this.conversationState = conversationState;
