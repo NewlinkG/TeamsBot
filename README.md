@@ -129,38 +129,45 @@ curl -X POST https://newlinker-fn.azurewebsites.net/api-zammad-wh   -H "Content-
 
 ---
 
-## 🚀 Data Flow (Mermaid)
+---
+
+## 🚀 Revised Data Flow (Mermaid)
+
 ```mermaid
 flowchart TD
-  subgraph BotWorkflow
-    U[User in Teams] --> M[/api/messages]
-    M --> C{Command?}
+  %% Bot Workflow
+  subgraph BotWorkflow ["Bot Workflow"]
+    U([User in Teams]) --> M(["POST /api/messages"])
+    M --> C{Is this a command?}
     C -- Yes --> T[ticketClient.js]
     T --> H[Helpdesk API]
-    H --> R[Bot Response]
+    H --> R([Bot sends response])
     C -- No --> O[openaiClient.js]
-    O --> S{Confidence?}
-    S -- High --> G[GPT Response]
-    S -- Low --> L[retrievalClient.js]
-    L --> P[Pinecone] --> G
+    O --> S{Confidence ≥ threshold?}
+    S -- Yes --> G([GPT-4o Response])
+    S -- No --> L[retrievalClient.js]
+    L --> P[Pinecone Search]
+    P --> G
   end
 
-  subgraph NotificationWebhook
-    Z[Zammad Webhook POST] --> W[api-zammad-wh/index.js]
-    W --> V[Validate Secret]
-    V --> Q[Enqueue to Service Bus]
-    Q --> F[scheduleNotifications / Processor]
+  %% Notification Webhook
+  subgraph NotificationWebhook ["Notification Webhook"]
+    Z([Zammad Webhook POST]) --> W[api-zammad-wh/index.js]
+    W --> V[Validate `X-Zammad-Webhook-Secret`]
+    V --> Q[Enqueue event to Service Bus]
+    Q --> F[scheduleNotifications.js / Processor]
     F --> Y[formatTicketUpdate.js]
-    Y --> B[Bot Framework sendProactive]
-    B --> Cn[Teams via teamsIdStore]
+    Y --> B[Bot Framework: sendProactive()]
+    B --> Cn([Teams via teamsIdStore.js])
   end
 
-  subgraph NotionIngestion
-    N[ingest-notion/index.js] --> NotionAPI[Notion API]
-    NotionAPI --> Chunk[Chunk & Vectorize]
-    Chunk --> Pinecone[Index]
+  %% Notion Ingestion
+  subgraph NotionIngestion ["Notion Ingestion"]
+    N([Timer Trigger: ingest-notion/index.js]) --> NA[Notion API]
+    NA --> Ch[Chunk & Vectorize]
+    Ch --> Pi[Index into Pinecone]
   end
-```
+
 
 ---
 
