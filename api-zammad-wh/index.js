@@ -73,15 +73,18 @@ module.exports = async function (context, req) {
     }
 
     const reference = {
-      serviceUrl: 'https://smba.trafficmanager.net/emea/', // adjust if needed
+      bot: { id: MicrosoftAppId },
+      user: { id: teamsId },
+      serviceUrl: 'https://smba.trafficmanager.net/emea/',
       channelId: 'msteams',
       conversation: { isGroup: false },
-      user: { id: teamsId },
-      bot: { id: MicrosoftAppId }
+      channelData: {
+        tenant: { id: process.env.TenantId }
+      }
     };
 
     try {
-      await adapter.continueConversation(reference, async (ctx) => {
+      await adapter.createConversation(reference, async (ctx) => {
         await ctx.sendActivity(`🔔 Your ticket "${ticket.title}" has been updated.`);
       });
       context.log(`✅ Teams message sent to ${recipientEmail}`);
