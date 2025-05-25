@@ -63,8 +63,9 @@ async function saveIfChanged(email, teamsId, upn = null, conversationId = null) 
     !existing ||
     existing.upn !== upn ||
     existing.reference?.user?.id !== teamsId ||
-  existing.reference?.conversation?.id !== conversationId
-  ) {
+    !existing.reference?.conversation?.id
+  )
+ {
     inMemoryCache[email] = updated;
     isDirty = true;
     console.log(`💾 Updated Teams ID record for ${email}`);

@@ -2,8 +2,10 @@ const crypto = require('crypto');
 const { sendProactiveTeamsMessage } = require('../proactiveHelper');
 const { formatTicketUpdate } = require('../formatTicketUpdate');
 const { BotFrameworkAdapter } = require('botbuilder');
-const { getTeamsId } = require('../teamsIdStore');
 const { MicrosoftAppId, MicrosoftAppPassword } = process.env; 
+const { getAllUsers } = require('../teamsIdStore');
+const users = await getAllUsers();
+const record = users[recipientEmail];
 
 const adapter = new BotFrameworkAdapter({
   appId: MicrosoftAppId,
@@ -65,22 +67,18 @@ module.exports = async function (context, req) {
   const recipientEmail = ticket.customer.email; // or `created_by`, depending on your Zammad config
 
   if (recipientEmail) {
-    const teamsId = await getTeamsId(recipientEmail);
-    if (!teamsId) {
-      context.log.warn(`⚠️ No Teams ID found for ${recipientEmail}`);
+    if (!record?.reference?.user?.id || !record.reference?.conversation?.id) {
+      context.log.warn(`⚠️ No Teams reference found for ${recipientEmail}`);
       context.res = { status: 202, body: `User ${recipientEmail} not registered.` };
       return;
     }
 
     const reference = {
       bot: { id: MicrosoftAppId },
-      user: { id: teamsId },
-      serviceUrl: 'https://smba.trafficmanager.net/emea/',
-      channelId: 'msteams',
-      conversation: { isGroup: false },
-      channelData: {
-        tenant: { id: process.env.TenantId }
-      }
+      user: { id: record.reference.user.id },
+      conversation: { id: record.reference.conversation.id },
+      serviceUrl: 'https://smba.trafficmanager.net/amer/',
+      channelId: 'msteams'
     };
 
     try {
