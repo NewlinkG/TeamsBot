@@ -60,34 +60,41 @@ class TeamsBot extends ActivityHandler {
       const botId = activity.recipient.id;
       for (const member of activity.membersAdded || []) {
         if (member.id === botId) continue;
-        const teamsUserId = member.id;
-        let upn = null;
+        // ─── Resolve true UPN, email & displayName from Graph ─────────────
+        let upn, email, userName;
         try {
-          // Try Graph via TeamsInfo to get the true userPrincipalName or email
           const details = await TeamsInfo.getMember(context, member.id);
-          upn = details.userPrincipalName || details.email || null;
+          upn      = details.userPrincipalName;
+          email    = details.email || details.mail;
+          userName = details.name   || details.displayName;
         } catch (err) {
-          console.warn('⚠️ Could not fetch member UPN via TeamsInfo:', err.message);
+          console.warn('⚠️ TeamsInfo.getMember failed:', err.message);
         }
 
-        // Fallback on the raw activity fields if Graph didn’t return them
-        if (!upn && member.userPrincipalName) upn = member.userPrincipalName;
-        if (!upn && member.email)            upn = member.email;
-
-        // If we still don’t have a valid UPN/email, skip this user
-        if (!upn) {
-          console.warn('⚠️ Missing userPrincipalName or email; skipping user registration for member.id=', member.id);
+        // Skip if absolutely nothing useful returned
+        if (!upn && !email) {
+          console.warn('⚠️ No UPN or email for member.id=', member.id, '; skipping registration.');
           continue;
         }
-        const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
-        const reference = TurnContext.getConversationReference(activity);
-        await saveFullReference(zammadEmail, upn, reference);
-        await context.sendActivity(`👋 Hi there! I’m **OrbIT**, your helpdesk assistant.
+
+        // Build and enrich the conversation reference
+        const fullRef = TurnContext.getConversationReference(context.activity);
+        fullRef.user.name = userName;   // store the real display name
+
+        // Persist under **email** key (so you can look up by customer email)
+        if (email) {
+          await saveFullReference(
+            email, // key: the user’s SMTP address
+            upn,   // saved value: still the AAD UPN
+            fullRef
+          );
+        }
+        await context.sendActivity(`👋 Hi there! I’m **OrbIT**, your helpdesk assistant.\n\n
 
 🔔 I’ll keep you updated on:
 • Ticket assignments  
 • Status changes  
-• Internal notes
+• Internal notes\n\n
 
 No need to check email — I’ve got you covered here in Teams.`);
       }
