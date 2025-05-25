@@ -16,6 +16,109 @@ const adapter = new BotFrameworkAdapter({
 module.exports = async function (context, req) {
   const SHARED_SECRET = process.env.HELPDESK_WEBHOOK_SECRET; // define en App Settings
   const users = await getAllUsers();
+  // Determine notification targets based on ticket state
+  const ticketState = (ticket.state || '').toLowerCase();
+  let agentsToNotify = [];
+
+  if (ticketState === 'new') {
+    // Notify all org members except the customer
+    agentsToNotify = (ticket.organization?.members || []).filter(email =>
+      email.toLowerCase() !== recipientEmail.toLowerCase()
+    );
+  } else if (ticket.owner?.email) {
+    // Notify only the owner
+    agentsToNotify = [ticket.owner.email];
+  }
+
+  // Loop over selected recipients and send notification
+  for (const email of agentsToNotify) {
+    const normalized = email.toLowerCase();
+    const record = users[normalized];
+
+    if (!record?.reference?.user?.id || !record.reference?.conversation?.id) {
+      context.log(`ℹ️ Skipping ${email} — no Teams reference`);
+      continue;
+    }
+
+    try {
+      await adapter.continueConversation(record.reference, async (ctx) => {
+        const card = {
+          type: 'AdaptiveCard',
+          body: [
+            {
+              type: 'TextBlock',
+              text: ticketState === 'new'
+                ? `📥 New Ticket Created`
+                : `🔔 Ticket Updated`,
+              weight: 'Bolder',
+              size: 'Medium',
+              wrap: true
+            },
+            {
+              type: 'TextBlock',
+              text: `**${ticket.title}**`,
+              wrap: true
+            },
+            {
+              type: 'TextBlock',
+              text: `#${ticket.id} — ${ticket.state}`,
+              spacing: 'None',
+              isSubtle: true,
+              wrap: true
+            },
+            {
+              type: 'TextBlock',
+              text: ticket.owner
+                ? `👨‍🔧 Assigned to ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
+                : '👨‍🔧 Unassigned',
+              spacing: 'None',
+              isSubtle: true,
+              wrap: true
+            }
+          ],
+          actions: [
+            {
+              type: 'Action.OpenUrl',
+              title: '🔗 View in browser',
+              url: `${process.env.HELPDESK_WEB_URL}/${ticket.id}`
+            },
+            ...(ticketState === 'new' ? [{
+              type: 'Action.Submit',
+              title: '✋ Claim',
+              data: {
+                action: 'claimTicket',
+                ticketId: ticket.id
+              }
+            }] : []),
+            {
+              type: 'Action.Submit',
+              title: '✅ Close',
+              data: {
+                action: 'closeTicket',
+                ticketId: ticket.id
+              }
+            }
+          ],
+          $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+          version: '1.4'
+        };
+
+        await ctx.sendActivity({
+          type: 'message',
+          attachments: [
+            {
+              contentType: 'application/vnd.microsoft.card.adaptive',
+              content: card
+            }
+          ]
+        });
+      });
+
+      context.log(`📤 Notified ${email}`);
+    } catch (err) {
+      context.log.warn(`⚠️ Failed to notify ${email}:`, err.message);
+    }
+  }
 
   // 🧾 Raw body as string
   const rawBody = req.rawBody;
@@ -34,8 +137,8 @@ module.exports = async function (context, req) {
     .update(rawBody)
     .digest('hex');
 
-  context.log('🔍 Signature header:', signatureValue);
-  context.log('🔍 Computed HMAC:', expectedHmac);
+  //context.log('🔍 Signature header:', signatureValue);
+  //context.log('🔍 Computed HMAC:', expectedHmac);
 
   if (!crypto.timingSafeEqual(Buffer.from(signatureValue), Buffer.from(expectedHmac))) {
     context.log.warn('⛔ Signature mismatch.');
@@ -114,6 +217,22 @@ module.exports = async function (context, req) {
               type: 'Action.OpenUrl',
               title: '🔗 View in browser',
               url: `${process.env.HELPDESK_WEB_URL}/${ticket.id}`
+            },
+            {
+              type: 'Action.Submit',
+              title: '✏️ Edit',
+              data: {
+                action: 'startEditTicket',
+                ticketId: ticket.id
+              }
+            },
+            {
+              type: 'Action.Submit',
+              title: '✅ Close',
+              data: {
+                action: 'closeTicket',
+                ticketId: ticket.id
+              }
             }
           ],
           $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',

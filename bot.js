@@ -201,6 +201,26 @@ No need to check email — I’ve got you covered here in Teams.`;
 
     // 1) CONFIRM / CANCEL flows
     const value = context.activity.value;
+    if (value && value.action === 'claimTicket') {
+      const ticketId = value.ticketId;
+      const userName = context.activity.from.name;
+      const userEmail = context.activity.from.email || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
+
+      const claimMessage = `🙋‍♂️ Ticket claimed by ${userName} via Teams`;
+
+      try {
+        // Set the owner and add a comment in Zammad
+        await addCommentToTicket(ticketId, claimMessage, userEmail);
+
+        await context.sendActivity(`✅ Ticket #${ticketId} has been assigned to you and a comment was added.`);
+      } catch (err) {
+        console.error('❌ Failed to claim ticket:', err.message);
+        await context.sendActivity(`❌ Could not claim ticket: ${err.message}`);
+      }
+
+      return;
+    }
+
     if (value && value.action === 'confirmTicket') {
       const cardLang = value.lang || lang;
       const LC = i18n[cardLang];
