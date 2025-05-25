@@ -30,10 +30,10 @@ module.exports = async function (context, req) {
   }
 
   const ticketState = (ticket.state || '').toLowerCase();
+  context.log(`📌 Ticket state: ${ticketState}, channel: ${article.channel}`);
   let agentsToNotify = [];
 
-  if (ticketState === 'new') {
-    // Notify all org members except the customer
+  if (ticketState === 'new' && ['Email', 'Web'].includes(article.channel)) {
     agentsToNotify = (ticket.organization?.members || []).filter(email =>
       email.toLowerCase() !== recipientEmail.toLowerCase()
     );
@@ -195,7 +195,9 @@ module.exports = async function (context, req) {
           body: [
             {
               type: 'TextBlock',
-              text: `🔔 Ticket Updated`,
+              text: ticketState === 'new'
+                ? `📥 Ticket Created`
+                : `🔔 Ticket Updated`,
               weight: 'Bolder',
               size: 'Medium',
               wrap: true
