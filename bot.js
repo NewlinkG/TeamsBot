@@ -64,6 +64,7 @@ class TeamsBot extends ActivityHandler {
       const { membersAdded, recipient, activity } = context;
 
       for (const member of membersAdded || []) {
+        console.log('👤 Processing member:', member);
         const welcomeText = `👋 Hi ${member.name || 'there'}! I’m **OrbIT**, your helpdesk assistant.
 
 🔔 I’ll keep you updated on:
@@ -73,7 +74,10 @@ class TeamsBot extends ActivityHandler {
 
 No need to check email — I’ve got you covered here in Teams.`;
         // Skip the bot itself
-        if (member.id === recipient.id) continue;
+        if (member.id === context.activity.recipient.id) {
+          console.log('ℹ️ Skipping bot self');
+          continue;
+        }
 
         const teamsUserId = member.id;
 
