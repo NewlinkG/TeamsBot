@@ -61,6 +61,7 @@ class TeamsBot extends ActivityHandler {
     super();
     this.onConversationUpdate(async (context, next) => {
   const { activity } = context;
+  const botId = context.activity.recipient.id;
 
   console.log('📥 onConversationUpdate fired:', {
     membersAdded: activity.membersAdded,
@@ -69,11 +70,10 @@ class TeamsBot extends ActivityHandler {
   });
 
   for (const member of activity.membersAdded || []) {
-    if (member.id === context.activity.recipient.id || member.id === context.activity.recipient.aadObjectId) {
-      console.log('ℹ️ Skipping bot self', member.id);
+    if (member.id === botId) {
+      console.log('ℹ️ Skipping bot self:', member.id);
       continue;
     }
-
     console.log('👤 Processing member:', member);
 
     const teamsUserId = member.id;
@@ -108,7 +108,7 @@ No need to check email — I’ve got you covered here in Teams.`);
 });
 
 
-  async processAttachments(context, token, userEmail) {
+  const processAttachments = async (context, token, userEmail) => {
     const attachmentTokens = [];
     let commentNote = '';
 
@@ -169,7 +169,7 @@ No need to check email — I’ve got you covered here in Teams.`);
     }
 
     return { attachmentTokens, commentNote: commentNote.trim() };
-  }
+  }}
 
   async handleMessage(context, next) {
     const text   = (context.activity.text || '').trim();
