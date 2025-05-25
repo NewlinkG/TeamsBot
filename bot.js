@@ -13,15 +13,6 @@ const axios = require('axios');
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
 if (!helpdeskWebUrl) throw new Error('Missing HELPDESK_WEB_URL env var');
 
-const welcomeText = `👋 Hi ${member.name || 'there'}! I’m **OrbIT**, your helpdesk assistant.
-
-🔔 I’ll keep you updated on:
-• Ticket assignments  
-• Status changes  
-• Internal notes
-
-No need to check email — I’ve got you covered here in Teams.`;
-
 function detectLanguageFromLocale(locale) {
   if (locale.startsWith('en')) return 'en';
   if (locale.startsWith('pt')) return 'pt';
@@ -72,6 +63,14 @@ class TeamsBot extends ActivityHandler {
       const { membersAdded, recipient, activity } = context;
 
       for (const member of membersAdded || []) {
+        const welcomeText = `👋 Hi ${member.name || 'there'}! I’m **OrbIT**, your helpdesk assistant.
+
+🔔 I’ll keep you updated on:
+• Ticket assignments  
+• Status changes  
+• Internal notes
+
+No need to check email — I’ve got you covered here in Teams.`;
         // Skip the bot itself
         if (member.id === recipient.id) continue;
 
