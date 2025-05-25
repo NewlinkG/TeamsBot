@@ -13,6 +13,12 @@ const blobClient = BlobServiceClient
 let inMemoryCache = null; // lazy loaded
 let isDirty = false;
 
+async function ensureCacheLoaded() {
+  if (!inMemoryCache) {
+    await loadCache();
+  }
+}
+
 // Utility: Stream → string
 async function streamToString(readableStream) {
   return new Promise((resolve, reject) => {
@@ -43,13 +49,13 @@ async function loadCache() {
 }
 
 async function getTeamsId(email) {
-  await loadCache();
+  await ensureCacheLoaded();
   return inMemoryCache[email]?.teamsId || null;
 }
 
 // Public: Save only if changed
 async function saveIfChanged(email, teamsId, upn = null, conversationId = null) {
-  await loadCache();
+  await ensureCacheLoaded();
   const existing = inMemoryCache[email];
   const updated = {
     upn,
@@ -84,7 +90,7 @@ async function flush() {
 
 // Optional: Expose full map (read-only)
 async function getAllUsers() {
-  await loadCache();
+  await ensureCacheLoaded();
   return { ...inMemoryCache };
 }
 
