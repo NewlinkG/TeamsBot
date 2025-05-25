@@ -85,7 +85,58 @@ module.exports = async function (context, req) {
 
     try {
       await adapter.createConversation(reference, async (ctx) => {
-        await ctx.sendActivity(`🔔 Your ticket "${ticket.title}" has been updated.`);
+        const card = {
+          type: 'AdaptiveCard',
+          body: [
+            {
+              type: 'TextBlock',
+              text: `🔔 Ticket Updated`,
+              weight: 'Bolder',
+              size: 'Medium',
+              wrap: true
+            },
+            {
+              type: 'TextBlock',
+              text: `**${ticket.title}**`,
+              wrap: true
+            },
+            {
+              type: 'TextBlock',
+              text: `#${ticket.id} — ${ticket.state || 'Open'}`,
+              spacing: 'None',
+              isSubtle: true,
+              wrap: true
+            },
+            {
+              type: 'TextBlock',
+              text: ticket.owner
+                ? `👨‍🔧 ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
+                : '👨‍🔧 Unassigned',
+              spacing: 'None',
+              isSubtle: true,
+              wrap: true
+            }
+          ],
+          actions: [
+            {
+              type: 'Action.OpenUrl',
+              title: '🔗 View in browser',
+              url: `${process.env.HELPDESK_WEB_URL}/${ticket.id}`
+            }
+          ],
+          $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+          version: '1.4'
+        };
+
+        await ctx.sendActivity({
+          type: 'message',
+          attachments: [
+            {
+              contentType: 'application/vnd.microsoft.card.adaptive',
+              content: card
+            }
+          ]
+        });
       });
       context.log(`✅ Teams message sent to ${recipientEmail}`);
     } catch (error) {
