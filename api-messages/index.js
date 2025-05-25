@@ -24,8 +24,8 @@ const conversationState = new ConversationState(memoryStorage);
 const bot = new TeamsBot(conversationState);
 
 // **Export a non-async function** 
-module.exports = async function (context, req) {
-  await adapter.processActivity(context, req, async (turnContext) => {
+module.exports = function (context, req) {
+  adapter.processActivity(req, context.res, async (turnContext) => {
     await bot.run(turnContext);
     await conversationState.saveChanges(turnContext);
   });
