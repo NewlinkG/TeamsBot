@@ -48,12 +48,23 @@ async function getTeamsId(email) {
 }
 
 // Public: Save only if changed
-async function saveIfChanged(email, teamsId, upn = null) {
+async function saveIfChanged(email, teamsId, upn = null, conversationId = null) {
   await loadCache();
   const existing = inMemoryCache[email];
-  const updated = { teamsId, upn };
+  const updated = {
+    upn,
+    reference: {
+        user: { id: teamsId },
+        conversation: { id: conversationId },
+    }
+    };
 
-  if (!existing || existing.teamsId !== teamsId || existing.upn !== upn) {
+  if (
+    !existing ||
+    existing.upn !== upn ||
+    existing.reference?.user?.id !== teamsId ||
+  existing.reference?.conversation?.id !== conversationId
+  ) {
     inMemoryCache[email] = updated;
     isDirty = true;
     console.log(`💾 Updated Teams ID record for ${email}`);

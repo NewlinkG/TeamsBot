@@ -76,13 +76,14 @@ No need to check email — I’ve got you covered here in Teams.`;
 
         const teamsUserId = member.id;
         const upn = activity.from?.email;
+        const conversationId = context.activity.conversation?.id;
 
         if (upn && teamsUserId) {
           // Normalize email to Zammad domain format
           const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
 
           console.log(`📥 Bot added for user ${upn} → storing as ${zammadEmail}, Teams ID: ${teamsUserId}`);
-          await saveIfChanged(zammadEmail, teamsUserId, upn);
+          await saveIfChanged(zammadEmail, teamsUserId, upn, conversationId);
 
           await context.sendActivity(welcomeText);
         } else {
