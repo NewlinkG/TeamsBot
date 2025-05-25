@@ -30,10 +30,13 @@ module.exports = async function (context, req) {
   }
 
   const ticketState = (ticket.state || '').toLowerCase();
-  context.log(`📌 Ticket state: ${ticketState}, channel: ${article.channel}`);
+  context.log(`📌 Ticket state: ${ticketState}, channel: ${article.type}`);
   let agentsToNotify = [];
 
-  if (ticketState === 'new' && ['Email', 'Web'].includes(article.channel)) {
+  if (
+    ticketState === 'new' &&
+    ['email', 'web'].includes((article.type || '').toLowerCase())
+  ) {
     agentsToNotify = (ticket.organization?.members || []).filter(email =>
       email.toLowerCase() !== recipientEmail.toLowerCase()
     );
