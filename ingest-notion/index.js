@@ -292,7 +292,7 @@ module.exports = async function (context, myTimer) {
           if (blk.type === 'text') {
             blockText = blk.text + '\n';
             const blobName = `txt-${pid}-${blk.id}.txt`;
-            const textClient = extractedContainer.getBlockBlobClient(`txt-${pid}-${blockId}-${fn}.txt`);
+            const textClient = extractedContainer.getBlockBlobClient(`txt-${pid}-${blk.id}-${fn}.txt`);
             if (await textClient.exists()) {
               await textClient.delete();
             }
