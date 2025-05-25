@@ -79,6 +79,28 @@ async function saveIfChanged(email, teamsId, upn = null, conversationId = null) 
   }
 }
 
+async function saveFullReference(email, upn, reference) {
+  await ensureCacheLoaded();
+  const existing = inMemoryCache[email];
+
+  const updated = {
+    upn,
+    reference
+  };
+
+  if (
+    !existing ||
+    existing.upn !== upn ||
+    JSON.stringify(existing.reference) !== JSON.stringify(reference)
+  ) {
+    inMemoryCache[email] = updated;
+    isDirty = true;
+    console.log(`💾 Updated full reference for ${email}`);
+    await flush();
+  }
+}
+
+
 // Internal: Flush cache to blob
 async function flush() {
   if (!isDirty || !inMemoryCache) return;
@@ -97,5 +119,6 @@ async function getAllUsers() {
 module.exports = {
   saveIfChanged,
   getAllUsers,
-  getReference
+  getReference,
+  saveFullReference
 };

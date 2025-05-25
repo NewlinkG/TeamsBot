@@ -73,13 +73,7 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const reference = {
-      bot: { id: MicrosoftAppId },
-      user: { id: record.reference.user.id },
-      conversation: { id: record.reference.conversation.id },
-      serviceUrl: 'https://smba.trafficmanager.net/amer/',
-      channelId: 'msteams'
-    };
+    const reference = record.reference;
 
     try {
       await adapter.createConversation(reference, async (ctx) => {

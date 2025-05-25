@@ -83,7 +83,8 @@ No need to check email — I’ve got you covered here in Teams.`;
           const zammadEmail = upn.replace(/@newlinkcorp\.com$/i, '@newlink-group.com');
 
           console.log(`📥 Bot added for user ${upn} → storing as ${zammadEmail}, Teams ID: ${teamsUserId}`);
-          await saveIfChanged(email, reference.user.id, upn, reference.conversation.id);
+          const reference = TurnContext.getConversationReference(context.activity);
+          await saveFullReference(zammadEmail, upn, reference);
 
           await context.sendActivity(welcomeText);
         } else {
@@ -181,12 +182,10 @@ No need to check email — I’ve got you covered here in Teams.`;
       : fallbackEmail;
 
     if (zammadEmail && userId) {
-      const reference = await getReference(zammadEmail);
-      const existing = reference?.user?.id || null;
-      if (!existing) {
-        console.log(`🆕 User not yet registered, saving ${zammadEmail}`);
-        const reference = TurnContext.getConversationReference(context.activity);
-        await saveIfChanged(zammadEmail, reference.user.id, upn, reference.conversation.id);
+      const existingRef = await getReference(zammadEmail);
+      if (!existingRef) {
+        const fullRef = TurnContext.getConversationReference(context.activity);
+        await saveFullReference(zammadEmail, upn, fullRef);
       } else {
         console.log(`✅ User ${zammadEmail} already registered`);
       }
