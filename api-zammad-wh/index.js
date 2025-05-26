@@ -106,7 +106,9 @@ module.exports = async function (context, req) {
               ? `👨‍🔧 Assigned to ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
               : '👨‍🔧 Unassigned', isSubtle: true, wrap: true },
           // ─── Content ─────────────────────────────────────────
-          { type:'TextBlock', text: content, wrap:true },
+          ...(content && content !== '(no content)' ? [
+            { type:'TextBlock', text: content, wrap:true },
+          ] : []),
           ...(attachmentsList && attachmentsList !== '(none)' ? [
             { type:'TextBlock', text:'**Attachments:**', wrap:true },
             { type:'TextBlock', text: attachmentsList, wrap:true }
@@ -152,7 +154,9 @@ module.exports = async function (context, req) {
             { type: 'TextBlock', text: ticket.owner
                 ? `👨‍🔧 ${ticket.owner.firstname} ${ticket.owner.lastname || ''}`
                 : '👨‍🔧 Unassigned', isSubtle: true, wrap: true },
-            { type:'TextBlock', text: content, wrap:true },
+            ...(content && content !== '(no content)' ? [
+              { type:'TextBlock', text: content, wrap:true },
+            ] : []),
             ...(attachmentsList && attachmentsList !== '(none)' ? [
               { type:'TextBlock', text:'**Attachments:**', wrap:true },
               { type:'TextBlock', text: attachmentsList, wrap:true }
