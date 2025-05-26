@@ -165,6 +165,9 @@ module.exports = async function (context, req) {
         for await (const blob of extractedContainer.listBlobsFlat({ prefix: `txt-${id}-` })) {
           await extractedContainer.deleteBlob(blob.name);
         }
+        for await (const blob of extractedContainer.listBlobsFlat({ prefix: `ocr-${id}-` })) {
+          await extractedContainer.deleteBlob(blob.name);
+        }
         await pineIndex.delete({ filter: { pageId: id } });
         context.log(`✅ Purged data for deleted page ${id}`);
       }
@@ -292,7 +295,7 @@ module.exports = async function (context, req) {
           if (blk.type === 'text') {
             blockText = blk.text + '\n';
             const blobName = `txt-${pid}-${blk.id}.txt`;
-            const textClient = extractedContainer.getBlockBlobClient(`txt-${pid}-${blk.id}-${blobName}.txt`);
+            const textClient = extractedContainer.getBlockBlobClient(blobName);
             if (await textClient.exists()) {
               await textClient.delete();
             }
