@@ -15,7 +15,7 @@ const fs                            = require('fs/promises');
 const fsSync                        = require('fs');
 const fetch                         = require('node-fetch');
 
-module.exports = async function (context, req) {
+module.exports = async function (context, myTimer) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
   try {
     const E = key => { const v = process.env[key]; if (!v) throw new Error(`Missing env var: ${key}`); return v; };
@@ -165,13 +165,12 @@ module.exports = async function (context, req) {
             const buf = await pageClient.downloadToBuffer();
             const md  = JSON.parse(buf.toString());
             oldIds = md.recordIds || [];
-            context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for page ${id}`);
           } catch {
             context.log(`No vectors to purge for deleted page ${id}`);
           }
           if (oldIds.length) {
             await pineIndex.deleteMany(oldIds);
-            context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for file at page ${id}`);
+            context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for page ${id}`);
           }
           await pageClient.delete();
         }
@@ -420,7 +419,7 @@ module.exports = async function (context, req) {
           context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for file at page ${pid}`);
         }
         
-        if (records.length) await pineIndex.namespace('notion').upsert(records);
+        if (records.length) await pineIndex.upsert(records);
 
         // record last sync time (metadata only needs lastedited; recordIds live in content)
         const newMeta = { [lastKey]: pageMeta.last_edited_time, recordIds };
