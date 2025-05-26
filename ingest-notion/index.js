@@ -177,6 +177,10 @@ module.exports = async function (context, req) {
           const client = rawContainer.getBlockBlobClient(blob.name);
           if (await client.exists()) await client.delete();
         }
+        for await (const blob of rawContainer.listBlobsFlat({ prefix: `media-${id}-` })) {
+          const client = rawContainer.getBlockBlobClient(blob.name);
+          if (await client.exists()) await client.delete();
+        }
         await pineIndex.delete({ filter: { pageId: id } });
         context.log(`✅ Purged data for deleted page ${id}`);
       }
@@ -208,11 +212,12 @@ module.exports = async function (context, req) {
       const existing = [];
       for await (const b of rawContainer.listBlobsFlat({ prefix: `image-${pid}-` })) existing.push(b.name);
       for await (const b of rawContainer.listBlobsFlat({ prefix: `file-${pid}-`  })) existing.push(b.name);
+      for await (const b of rawContainer.listBlobsFlat({ prefix: `media-${pid}-`  })) existing.push(b.name);
 
       // build live set
       const liveSet = new Set(
         blocks
-          .filter(b => b.type === 'image' || b.type === 'file')
+          .filter(b => b.type === 'image' || b.type === 'file' || b.type === 'media')
           .map(b => {
             const fn = path.basename(new URL(b.url).pathname);
             return `${b.type}-${pid}-${b.id}-${fn}`;
@@ -229,7 +234,7 @@ module.exports = async function (context, req) {
             await blobClient.delete();
           }
           // also clean up extracted text
-          if (name.startsWith('file-')) {
+          if (name.startsWith('file-') || name.startsWith('media-')) {
             const [, , blockId, ...rest] = name.split('-');
             const fn = rest.join('-');
             // guard .txt deletion
@@ -297,7 +302,8 @@ module.exports = async function (context, req) {
         const records = [];
         const CHUNK   = 1000;
         for (const blk of blocks) {
-          context.log('Processing: ', blk.id, '-', blk.sourceTitle);
+          const label = filename || extractTitle(pageMeta.properties);
+          context.log('Processing: ', blk.id, '-', label);
           const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
           let blockText = '';
 
@@ -421,7 +427,7 @@ module.exports = async function (context, req) {
     context.res = { status: 200, body: 'Ingestion complete.' };
   } catch(err) {
     context.log.error('❌ ingest-notion failed:', err.message);
-    context.log.error(err.stack);
+    context.log.error(err.message);
     context.res = { status: 500, body: err.message };
   }
 };
