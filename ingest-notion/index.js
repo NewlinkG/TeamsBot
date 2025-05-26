@@ -181,7 +181,7 @@ module.exports = async function (context, req) {
           const client = rawContainer.getBlockBlobClient(blob.name);
           if (await client.exists()) await client.delete();
         }
-        await pineIndex.delete({ filter: { pageId: id } });
+        await pineIndex.namespace('notion').delete({ filter: { pageId: id } });
         context.log(`✅ Purged data for deleted page ${id}`);
       }
     }
@@ -403,10 +403,9 @@ module.exports = async function (context, req) {
           context.log('No previous metadata or no recordIds field → nothing to delete');
         }
 
-        await pineIndex.deleteMany(
-          oldIds,                   // <-- array of expired IDs
-          { namespace: 'notion' }      // <-- namespace option
-        );
+        if (oldIds.length) {
+          await pineIndex.deleteMany(oldIds);
+        }
         
         if (records.length) await pineIndex.namespace('notion').upsert(records);
 
