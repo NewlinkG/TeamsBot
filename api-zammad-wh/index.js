@@ -14,7 +14,7 @@ const adapter = new BotFrameworkAdapter({
  */
 module.exports = async function (context, req) {
   const SHARED_SECRET = process.env.HELPDESK_WEBHOOK_SECRET;
-  context.log('🔔 Webhook received:', JSON.stringify(req.body, null, 2));
+  //context.log('🔔 Webhook received:', JSON.stringify(req.body, null, 2));
 
   // validate signature (unchanged)
   const rawBody = req.rawBody;
@@ -38,7 +38,7 @@ module.exports = async function (context, req) {
     .join('\n') || '(none)';
 
   if (!article || !ticket || !recipientEmail) {
-    context.log.warn('⚠️ Incomplete payload:', req.body);
+    //context.log.warn('⚠️ Incomplete payload:', req.body);
     context.res = { status: 200 };
     return;
   }
