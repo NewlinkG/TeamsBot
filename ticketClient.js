@@ -18,12 +18,11 @@ if (!HELP_DESK_URL || !HELP_DESK_TOKEN) {
 async function ensureCustomerExists(userEmail, firstName, lastName) {
   const headers = {
     Authorization: `Token token=${HELP_DESK_TOKEN}`,
-    'Content-Type': 'application/json',
-    From: HELP_DESK_TOKEN // token owner performs creation
+    'Content-Type': 'application/json'
   };
 
   const searchUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/search?query=email:${encodeURIComponent(userEmail)}`;
-
+  console.log(`URL check user:\n\n ${searchUrl}`);
   try {
     const res = await axios.get(searchUrl, { headers });
     if (Array.isArray(res.data) && res.data.length > 0) {
