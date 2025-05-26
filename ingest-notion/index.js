@@ -186,8 +186,9 @@ module.exports = async function (context, req) {
           const buf = await pageClient.downloadToBuffer();
           const md  = JSON.parse(buf.toString());
           oldIds = md.recordIds || [];
+          context.log(`Vectors found to purge for deleted page ${id}`);
         } catch {
-          context.log(`No recordIds for deleted page ${id}`);
+          context.log(`No vectors to purge for deleted page ${id}`);
         }
         context.log(`✅ Purged data for deleted page ${id}`);
       }
