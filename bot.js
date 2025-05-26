@@ -357,6 +357,43 @@ No need to check email — I’ve got you covered here in Teams.`);
         draft.history.push({ role: 'assistant', content: firstQ });
         await this.draftAccessor.set(context, draft);
         return await context.sendActivity(firstQ);
+      case 'singleTk':
+        if (info.ticketId) {
+          const ticket = await getTicketById(info.ticketId, userEmail);
+
+          const card = {
+            type: 'AdaptiveCard',
+            body: [
+              { type: 'TextBlock', text: `🔎 Ticket #${ticket.id}`, weight: 'Bolder', size: 'Medium' },
+              { type: 'TextBlock', text: `📌 *${ticket.title}*`, wrap: true },
+              { type: 'TextBlock', text: `🗂 Estado: **${ticket.state}**`, wrap: true },
+              { type: 'TextBlock', text: `🧑 Asignado a: ${ticket.owner_id || '—'}`, wrap: true },
+              { type: 'TextBlock', text: `🕓 Creado: ${new Date(ticket.created_at).toLocaleString()}`, wrap: true },
+              { type: 'TextBlock', text: `🕑 Última actualización: ${new Date(ticket.updated_at).toLocaleString()}`, wrap: true },
+              { type: 'TextBlock', text: `💬 ${ticket.article?.body || '—'}`, wrap: true }
+            ],
+            actions: [
+              {
+                type: 'Action.OpenUrl',
+                title: '🔗 Ver en navegador',
+                url: `${helpdeskWebUrl}/${ticket.id}`
+              },
+              ...(ticket.state !== 'closed' ? [{
+                type: 'Action.Submit',
+                title: '✅ Cerrar Ticket',
+                data: {
+                  action: 'closeTicket',
+                  ticketId: ticket.id
+                }
+              }] : [])
+            ],
+            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+            version: '1.4'
+          };
+
+          return await context.sendActivity({ attachments: [CardFactory.adaptiveCard(card)] });
+        }
+        break;
       case 'listTks':
         return await this.renderTicketListCard(context, 0, false);
       case 'listTksPage':

@@ -66,14 +66,15 @@ const CLASSIFIER_PROMPTS = {
 
   Respond ONLY with a JSON in this format:
   {
-    "intent": "createTk" | "listTks" | "editTk" | "none",
+    "intent": "createTk" | "listTks" | "editTk" | "none" | "singleTk",
     "title": "...",         // (only for createTk)
     "summary": "...",       // (only for createTk)
-    "ticketId": 123,        // (only for editTk)
-    "comment": "..."        // (only for editTk, optional)
+    "ticketId": 123,        // (only for editTk and singleTk)
+    "comment": "..."        // (only for editTk and singleTk, optional)
   }
 
   Examples:
+  - If the user wants to view a single ticket → intent = "singleTk" 
   - If the user wants to open a new support ticket → intent = "createTk"
   - If the user wants to view or list their tickets → intent = "listTks"
   - If they want to add a comment or upload to an existing ticket → intent = "editTk"
@@ -85,14 +86,15 @@ const CLASSIFIER_PROMPTS = {
 
   Responde SOLO con un JSON en este formato:
   {
-    "intent": "createTk" | "listTks" | "editTk" | "none",
+    "intent": "createTk" | "listTks" | "editTk" | "none" | "singleTk",
     "title": "...",         // (solo para createTk)
     "summary": "...",       // (solo para createTk)
-    "ticketId": 123,        // (solo para editTk)
-    "comment": "..."        // (solo para editTk, opcional)
+    "ticketId": 123,        // (solo para editTk y singleTk)
+    "comment": "..."        // (solo para editTk y singleTk, opcional)
   }
 
   Ejemplos:
+  - Si el usuario quiere ver o consultar un solo ticket → intent = "singleTk"
   - Si el usuario quiere abrir un ticket nuevo → intent = "createTk"
   - Si el usuario quiere ver o listar sus tickets → intent = "listTks"
   - Si quiere agregar un comentario o archivo a un ticket existente → intent = "editTk"
@@ -100,24 +102,25 @@ const CLASSIFIER_PROMPTS = {
 
   No agregues texto adicional — solo responde el JSON.`,
 
-    pt: `Você é um assistente de suporte de TI corporativo treinado para classificar mensagens de usuários em intenções estruturadas.
+    pt: `Você é um assistente de suporte de TI corporativo treinado para classificar mensagens em intenções estruturadas.
 
   Responda SOMENTE com um JSON neste formato:
   {
-    "intent": "createTk" | "listTks" | "editTk" | "none",
+    "intent": "createTk" | "listTks" | "editTk" | "none" | "singleTk",
     "title": "...",         // (somente para createTk)
     "summary": "...",       // (somente para createTk)
-    "ticketId": 123,        // (somente para editTk)
-    "comment": "..."        // (somente para editTk, opcional)
+    "ticketId": 123,        // (somente para editTk e singleTk)
+    "comment": "..."        // (somente para editTk e singleTk, opcional)
   }
 
   Exemplos:
-  - Se o usuário quer abrir um novo chamado → intent = "createTk"
-  - Se quer visualizar ou listar seus chamados → intent = "listTks"
-  - Se deseja adicionar um comentário ou anexo a um chamado existente → intent = "editTk"
-  - Se for irrelevante ou incompreensível → intent = "none"
+  - Se o usuário quiser ver ou consultar um único ticket → intent = "singleTk"
+  - Se o usuário quiser abrir um novo ticket → intent = "createTk"
+  - Se o usuário quiser ver ou listar seus tickets → intent = "listTks"
+  - Se quiser adicionar um comentário ou arquivo a um ticket existente → intent = "editTk"
+  - Se não for compreendido ou não for relevante → intent = "none"
 
-  Não inclua explicações — apenas o JSON.`,
+  Não adicione texto adicional — responda apenas o JSON.`,
   };
 
 

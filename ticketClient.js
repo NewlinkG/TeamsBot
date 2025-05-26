@@ -22,7 +22,6 @@ async function ensureCustomerExists(userEmail, firstName, lastName) {
   };
 
   const searchUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/search?query=email:${encodeURIComponent(userEmail)}`;
-  console.log(`URL check user:\n\n ${searchUrl}`);
   try {
     const res = await axios.get(searchUrl, { headers });
     if (Array.isArray(res.data) && res.data.length > 0) {
@@ -160,6 +159,20 @@ async function listTickets(email, { openOnly = true } = {}) {
 }
 
 
+async function getTicketById(ticketId, userEmail) {
+  const headers = {
+    Authorization: `Token token=${HELP_DESK_TOKEN}`,
+    'Content-Type': 'application/json',
+    From: userEmail
+  };
+
+  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}?expand=true`;
+
+  const res = await axios.get(url, { headers });
+  return res.data;
+}
+
+
 async function uploadAttachment(file, userEmail) {
   const form = new FormData();
   form.append('file', file.buffer, file.originalname);
@@ -240,6 +253,7 @@ const localizedBody = closeMessages[lang] || closeMessages['es'];
 module.exports = {
   createTicket,
   listTickets,
+  getTicketById,
   addCommentToTicket,
   uploadAttachment,
   closeTicket
