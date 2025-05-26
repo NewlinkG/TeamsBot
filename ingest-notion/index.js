@@ -181,8 +181,20 @@ module.exports = async function (context, req) {
           const client = rawContainer.getBlockBlobClient(blob.name);
           if (await client.exists()) await client.delete();
         }
-        await pineIndex.namespace('notion').delete({ filter: { pageId: id } });
-        context.log(`✅ Purged data for deleted page ${id}`);
+        const metaClient = rawContainer.getBlockBlobClient(`page-${id}.json`);
+        let oldIds = [];
+        try {
+          const props = await metaClient.downloadToBuffer();
+          const md = JSON.parse(props.toString());
+          oldIds = md.recordIds || [];
+        } catch {
+          context.log('No recordIds found for deleted page', id);
+        }
+
+        if (oldIds.length) {
+          await pineIndex.deleteMany(oldIds);
+          context.log(`✅ Deleted ${oldIds.length} vectors from Pinecone for page ${id}`);
+        }
       }
     }
 
