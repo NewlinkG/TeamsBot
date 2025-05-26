@@ -181,20 +181,8 @@ module.exports = async function (context, req) {
           const client = rawContainer.getBlockBlobClient(blob.name);
           if (await client.exists()) await client.delete();
         }
-        const metaClient = rawContainer.getBlockBlobClient(`page-${id}.json`);
-        let oldIds = [];
-        try {
-          const props = await metaClient.downloadToBuffer();
-          const md = JSON.parse(props.toString());
-          oldIds = md.recordIds || [];
-        } catch {
-          context.log('No recordIds found for deleted page', id);
-        }
-
-        if (oldIds.length) {
-          await pineIndex.deleteMany(oldIds);
-          context.log(`✅ Deleted ${oldIds.length} vectors from Pinecone for page ${id}`);
-        }
+        await pineIndex.delete({ filter: { pageId: id } });
+        context.log(`✅ Purged data for deleted page ${id}`);
       }
     }
 
@@ -416,7 +404,10 @@ module.exports = async function (context, req) {
         }
 
         if (oldIds.length) {
-          await pineIndex.deleteMany(oldIds);
+          await pineIndex.deleteMany(
+          oldIds,                   // <-- array of expired IDs
+          { namespace: 'notion' }      // <-- namespace option
+        );
         }
         
         if (records.length) await pineIndex.namespace('notion').upsert(records);
