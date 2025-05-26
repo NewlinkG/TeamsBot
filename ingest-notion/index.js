@@ -168,6 +168,15 @@ module.exports = async function (context, req) {
         for await (const blob of extractedContainer.listBlobsFlat({ prefix: `ocr-${id}-` })) {
           await extractedContainer.deleteBlob(blob.name);
         }
+        // ─── delete raw attachments for this page ───
+        for await (const blob of rawContainer.listBlobsFlat({ prefix: `image-${id}-` })) {
+          const client = rawContainer.getBlockBlobClient(blob.name);
+          if (await client.exists()) await client.delete();
+        }
+        for await (const blob of rawContainer.listBlobsFlat({ prefix: `file-${id}-` })) {
+          const client = rawContainer.getBlockBlobClient(blob.name);
+          if (await client.exists()) await client.delete();
+        }
         await pineIndex.delete({ filter: { pageId: id } });
         context.log(`✅ Purged data for deleted page ${id}`);
       }
