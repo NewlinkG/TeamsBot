@@ -4,7 +4,7 @@ const {
   callAzureOpenAIStream,
   classifySupportRequest
 } = require('./openaiClient');
-const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket } = require('./ticketClient');
+const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket, getTicketById } = require('./ticketClient');
 const { MicrosoftAppCredentials } = require('botframework-connector');
 const { getReference, saveFullReference } = require('./teamsIdStore');
 const axios = require('axios');
