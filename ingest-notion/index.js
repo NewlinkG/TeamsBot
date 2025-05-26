@@ -1,3 +1,5 @@
+console.log('🔧 ingest-notion module loaded');
+
 const { Client: NotionClient }      = require('@notionhq/client');
 const { BlobServiceClient }         = require('@azure/storage-blob');
 const { ComputerVisionClient }      = require('@azure/cognitiveservices-computervision');
@@ -11,6 +13,7 @@ const path                          = require('path');
 const os                            = require('os');
 const fs                            = require('fs/promises');
 const fsSync                        = require('fs');
+const fetch                         = require('node-fetch');
 
 module.exports = async function (context, req) {
   context.log('⏱️ ingest-notion triggered at', new Date().toISOString());
@@ -289,7 +292,7 @@ module.exports = async function (context, req) {
           if (blk.type === 'text') {
             blockText = blk.text + '\n';
             const blobName = `txt-${pid}-${blk.id}.txt`;
-            const textClient = extractedContainer.getBlockBlobClient(`txt-${pid}-${blk.id}-${fn}.txt`);
+            const textClient = extractedContainer.getBlockBlobClient(`txt-${pid}-${blk.id}-${blobName}.txt`);
             if (await textClient.exists()) {
               await textClient.delete();
             }
