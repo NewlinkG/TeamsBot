@@ -181,7 +181,7 @@ module.exports = async function (context, req) {
           const client = rawContainer.getBlockBlobClient(blob.name);
           if (await client.exists()) await client.delete();
         }
-        await pineIndex.delete({ filter: { pageId: id } });
+        await pineIndex.deleteOne(id);
         context.log(`✅ Purged data for deleted page ${id}`);
       }
     }
