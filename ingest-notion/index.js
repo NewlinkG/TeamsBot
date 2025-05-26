@@ -58,7 +58,7 @@ module.exports = async function (context, req) {
     });
 
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
-    const pineIndex = pinecone.Index(PINECONE_INDEX_NAME);
+    const pineIndex = pinecone.Index(PINECONE_INDEX_NAME).namespace('notion');;
 
     const diClient = DocumentIntelligenceClient(DI_ENDPOINT, new AzureKeyCredential(DI_KEY));
     const sleep = ms => new Promise(res => setTimeout(res, ms));
@@ -160,6 +160,19 @@ module.exports = async function (context, req) {
       for (const id of removed) {
         const pageClient = rawContainer.getBlockBlobClient(`page-${id}.json`);
         if (await pageClient.exists()) {
+          let oldIds = [];
+          try {
+            const buf = await pageClient.downloadToBuffer();
+            const md  = JSON.parse(buf.toString());
+            oldIds = md.recordIds || [];
+            context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for page ${id}`);
+          } catch {
+            context.log(`No vectors to purge for deleted page ${id}`);
+          }
+          if (oldIds.length) {
+            await pineIndex.deleteMany(oldIds);
+            context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for file at page ${id}`);
+          }
           await pageClient.delete();
         }
         for await (const blob of extractedContainer.listBlobsFlat({ prefix: `txt-${id}-` })) {
@@ -180,15 +193,6 @@ module.exports = async function (context, req) {
         for await (const blob of rawContainer.listBlobsFlat({ prefix: `media-${id}-` })) {
           const client = rawContainer.getBlockBlobClient(blob.name);
           if (await client.exists()) await client.delete();
-        }
-        let oldIds = [];
-        try {
-          const buf = await pageClient.downloadToBuffer();
-          const md  = JSON.parse(buf.toString());
-          oldIds = md.recordIds || [];
-          context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for page ${id}`);
-        } catch {
-          context.log(`No vectors to purge for deleted page ${id}`);
         }
         context.log(`✅ Purged data for deleted page ${id}`);
       }
@@ -412,11 +416,8 @@ module.exports = async function (context, req) {
         }
 
         if (oldIds.length) {
-          await pineIndex.deleteMany(
-          oldIds,                   // <-- array of expired IDs
-          { namespace: 'notion' }      // <-- namespace option
-        );
-        context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for file at page ${pid}`);
+          await pineIndex.deleteMany(oldIds);
+          context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for file at page ${pid}`);
         }
         
         if (records.length) await pineIndex.namespace('notion').upsert(records);
