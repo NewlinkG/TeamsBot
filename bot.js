@@ -306,6 +306,9 @@ No need to check email — I’ve got you covered here in Teams.`);
     }
 
     if (draft.state === 'editing') {
+      const userName  = context.activity.from.name;
+      const userEmail = context.activity.from.email
+        || `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
       let comment = text.trim();
       const ticketId = draft.ticketId;
       const teamsFiles = context.activity.attachments || [];
