@@ -302,9 +302,9 @@ module.exports = async function (context, req) {
         const records = [];
         const CHUNK   = 1000;
         for (const blk of blocks) {
+          const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
           const label = filename || extractTitle(pageMeta.properties);
           context.log('Processing: ', blk.id, '-', label);
-          const filename = blk.url ? path.basename(new URL(blk.url).pathname) : null;
           let blockText = '';
 
           if (blk.type === 'text') {
