@@ -340,6 +340,10 @@ No need to check email — I’ve got you covered here in Teams.`);
     }
 
     // 4) KICK-OFF SUPPORT FLOW
+
+    const userName  = context.activity.from.name;
+    const userEmail = context.activity.from.email
+      || `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
     switch (info.intent) {
       case 'createTk':
         draft = { state: 'awaiting', history: [] };
