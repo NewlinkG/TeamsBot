@@ -186,7 +186,7 @@ module.exports = async function (context, req) {
           const buf = await pageClient.downloadToBuffer();
           const md  = JSON.parse(buf.toString());
           oldIds = md.recordIds || [];
-          context.log(`Vectors found to purge for deleted page ${id}`);
+          context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for page ${id}`);
         } catch {
           context.log(`No vectors to purge for deleted page ${id}`);
         }
@@ -416,6 +416,7 @@ module.exports = async function (context, req) {
           oldIds,                   // <-- array of expired IDs
           { namespace: 'notion' }      // <-- namespace option
         );
+        context.log(`✅ Deleted ${oldIds.length} Pinecone vectors for file at page ${pid}`);
         }
         
         if (records.length) await pineIndex.namespace('notion').upsert(records);
