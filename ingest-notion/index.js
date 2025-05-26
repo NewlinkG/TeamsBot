@@ -403,12 +403,10 @@ module.exports = async function (context, req) {
           context.log('No previous metadata or no recordIds field → nothing to delete');
         }
 
-        if (oldIds.length) {
-          await pineIndex.deleteMany(
+        await pineIndex.deleteMany(
           oldIds,                   // <-- array of expired IDs
           { namespace: 'notion' }      // <-- namespace option
         );
-        }
         
         if (records.length) await pineIndex.namespace('notion').upsert(records);
 
