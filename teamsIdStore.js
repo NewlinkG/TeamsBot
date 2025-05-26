@@ -100,7 +100,6 @@ async function saveFullReference(email, upn, reference) {
   }
 }
 
-
 // Internal: Flush cache to blob
 async function flush() {
   if (!isDirty || !inMemoryCache) return;
@@ -116,9 +115,15 @@ async function getAllUsers() {
   return { ...inMemoryCache };
 }
 
+async function getFullRecord(email) {
+  await ensureCacheLoaded();
+  return inMemoryCache[email] || null;
+}
+
 module.exports = {
   saveIfChanged,
   getAllUsers,
   getReference,
-  saveFullReference
+  saveFullReference,
+  getFullRecord
 };

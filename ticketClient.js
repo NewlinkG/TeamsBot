@@ -15,42 +15,76 @@ if (!HELP_DESK_URL || !HELP_DESK_TOKEN) {
   );
 }
 
+async function ensureCustomerExists(userEmail, firstName, lastName) {
+  const headers = {
+    Authorization: `Token token=${HELP_DESK_TOKEN}`,
+    'Content-Type': 'application/json',
+    From: HELP_DESK_TOKEN // token owner performs creation
+  };
+
+  const searchUrl = `${HELP_DESK_URL.replace(/\/+$/, '')}/users/search?query=email:${encodeURIComponent(userEmail)}`;
+
+  try {
+    const res = await axios.get(searchUrl, { headers });
+    if (Array.isArray(res.data) && res.data.length > 0) {
+      return res.data[0]; // already exists
+    }
+  } catch (err) {
+    console.warn(`🔍 User lookup failed for ${userEmail}:`, err.message);
+  }
+
+  // Auto-create user
+  const payload = {
+    firstname: firstName,
+    lastname: lastName || '—',
+    email: userEmail,
+    login: userEmail,
+    role_ids: [3] // Customer role ID
+  };
+
+  try {
+    const createRes = await axios.post(`${HELP_DESK_URL.replace(/\/+$/, '')}/users`, payload, { headers });
+    console.log(`👤 Created Zammad customer: ${userEmail}`);
+    return createRes.data;
+  } catch (err) {
+    console.error(`❌ User creation failed for ${userEmail}:`, err.response?.data || err.message);
+    throw err;
+  }
+}
+
 async function createTicket({ title, description, userName, userEmail }) {
-  // Nombre completo → first/last
-  const parts     = userName.trim().split(/\s+/);
+  const parts = userName.trim().split(/\s+/);
   const firstName = parts.shift();
-  const lastName  = parts.join(' ');
+  const lastName = parts.join(' ');
+
+  // Ensure customer exists
+  await ensureCustomerExists(userEmail, firstName, lastName);
 
   const payload = {
     title,
     group_id: Number(HELP_DESK_GROUP_ID),
     customer: {
       firstname: firstName,
-      lastname:  lastName,
-      login:     userEmail,
-      email:     userEmail
+      lastname: lastName,
+      login: userEmail,
+      email: userEmail
     },
     article: {
       subject: title,
-      body:    description
+      body: description
     }
   };
 
-  // Añade el header From con el email del usuario:
   const headers = {
     Authorization: `Token token=${HELP_DESK_TOKEN}`,
     'Content-Type': 'application/json',
-    From:           userEmail            // <— impersona al usuario
+    From: userEmail // now safe to impersonate
   };
 
-  const resp = await axios.post(
-    `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets`,
-    payload,
-    { headers }
-  );
-
+  const resp = await axios.post(`${HELP_DESK_URL.replace(/\/+$/, '')}/tickets`, payload, { headers });
   return resp.data;
 }
+
 
 async function listTickets(email, { openOnly = true } = {}) {
   const headers = {
