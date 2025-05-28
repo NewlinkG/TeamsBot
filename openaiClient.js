@@ -64,13 +64,14 @@ y puedes crear y gestionar solicitudes de soporte técnico con el departamento d
 const CLASSIFIER_PROMPTS = {
   en: `You are a corporate IT assistant trained to classify user messages into structured intents.
 
-  Respond ONLY with a JSON in this format:
+  Respond ONLY with a JSON in this format, include the ISO code for your current language in a "lang" field:
   {
     "intent": "createTk" | "listTks" | "editTk" | "none" | "singleTk",
     "title": "...",         // (only for createTk)
     "summary": "...",       // (only for createTk)
     "ticketId": 123,        // (only for editTk and singleTk)
     "comment": "..."        // (only for editTk and singleTk, optional)
+    "lang":"<iso>"
   }
 
   Examples:
@@ -84,13 +85,14 @@ const CLASSIFIER_PROMPTS = {
     
     es: `Eres un asistente de soporte de TI corporativo entrenado para clasificar mensajes en intenciones estructuradas.
 
-  Responde SOLO con un JSON en este formato:
+  Responde SOLO con un JSON en este formato, incluye el codigo ISO de tu idioma actual en el campo "lang":
   {
     "intent": "createTk" | "listTks" | "editTk" | "none" | "singleTk",
     "title": "...",         // (solo para createTk)
     "summary": "...",       // (solo para createTk)
     "ticketId": 123,        // (solo para editTk y singleTk)
     "comment": "..."        // (solo para editTk y singleTk, opcional)
+    "lang":"<iso>"
   }
 
   Ejemplos:
@@ -104,13 +106,14 @@ const CLASSIFIER_PROMPTS = {
 
     pt: `Você é um assistente de suporte de TI corporativo treinado para classificar mensagens em intenções estruturadas.
 
-  Responda SOMENTE com um JSON neste formato:
+  Responda SOMENTE com um JSON neste formato, inclua o código ISO do seu idioma atual no campo "lang":
   {
     "intent": "createTk" | "listTks" | "editTk" | "none" | "singleTk",
     "title": "...",         // (somente para createTk)
     "summary": "...",       // (somente para createTk)
     "ticketId": 123,        // (somente para editTk e singleTk)
     "comment": "..."        // (somente para editTk e singleTk, opcional)
+    "lang":"<iso>"
   }
 
   Exemplos:

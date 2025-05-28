@@ -19,6 +19,8 @@ adapter.onTurnError = async (context, error) => {
 // State
 const memoryStorage    = new MemoryStorage();
 const conversationState = new ConversationState(memoryStorage);
+// ▶ Register auto-save middleware
+adapter.use(conversationState);
 
 // Bot
 const bot = new TeamsBot(conversationState);
@@ -27,7 +29,7 @@ const bot = new TeamsBot(conversationState);
 module.exports = function (context, req) {
   adapter.processActivity(req, context.res, async (turnContext) => {
     await bot.run(turnContext);
-    await conversationState.saveChanges(turnContext);
+    //await conversationState.saveChanges(turnContext);
   });
 };
 
