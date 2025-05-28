@@ -21,36 +21,155 @@ function detectLanguageFromLocale(locale) {
 // Localized strings
 const i18n = {
   en: {
+    greeting:      'Hi!',
     confirmPrompt: 'Please confirm the ticket details:',
     confirm:       'Confirm',
     cancel:        'Cancel',
     ticketLabel:   'Ticket',
+    statusLabel:   'Status',
+    createdLabel:  '🕓 Created',
+    updatedLabel:  '🕑 Last Update',
     createdSuffix: 'created successfully.',
     cancelled:     '👍 Ticket creation cancelled',
     parseError:    'Sorry, I couldn’t parse that. Can you rephrase?',
-    ticketClosed:  '✅ Ticket #{number} has been closed.'
+    ticketClosed:  '✅ Ticket #{number} has been closed.',
+    commentAdded:  '✅ Your comment has been added to ticket',
+    noAttachments: '⚠️ No attachments found in your message.',
+    writeComment:  '✏️ Write a comment.',
+    noTickets:     '🔍 You have no tickets.',
+    viewInBrowser: '🔗 View in browser',
+    edit:          '✏️ Edit',
+    close:         '✅ Close',
+    prev:          '⬅️ Previous',
+    next:          'Next ➡️',
+    hideClosed:    '🙈 Hide Closed',
+    showClosed:    '👁 Show Closed',
+    editPrompt:    '✏️ What would you like to add to ticket #{number}?',
+    commentFinal:  '📝 Comment added to ticket #{number}{files}.',
+    filesClause:   ' with file(s)',
+    assignedTo:    '🧑 Assigned to: {owner}',
+    notAssigned:   '—',
+    listTitle:     '📋 My Tickets',
+    unassigned:    'Unassigned'
   },
   pt: {
+    greeting:      'Olá!',
     confirmPrompt: 'Por favor confirme os detalhes do chamado:',
     confirm:       'Confirmar',
     cancel:        'Cancelar',
     ticketLabel:   'Chamado',
+    statusLabel:   'Estado',
+    createdLabel:  '🕓 Creado',
+    updatedLabel:  '🕑 Última atualização',
     createdSuffix: 'criado com sucesso.',
     cancelled:     '👍 Criação de chamado cancelada',
     parseError:    'Desculpe, não consegui entender. Pode reformular?',
-    ticketClosed:  '✅ Chamado #{number} foi encerrado.'
+    ticketClosed:  '✅ Chamado #{number} foi encerrado.',
+    commentAdded:  '✅ Seu comentário foi adicionado ao chamado',
+    noAttachments: '⚠️ Nenhum anexo encontrado na sua mensagem.',
+    writeComment:  '✏️ Escreva um comentário.',
+    noTickets:     '🔍 Você não tem chamados.',
+    viewInBrowser: '🔗 Ver no navegador',
+    edit:          '✏️ Editar',
+    close:         '✅ Fechar',
+    prev:          '⬅️ Anterior',
+    next:          'Próxima ➡️',
+    hideClosed:    '🙈 Ocultar Fechados',
+    showClosed:    '👁 Mostrar Fechados',
+    editPrompt:    '✏️ O que você gostaria de adicionar ao chamado #{number}?',
+    commentFinal:  '📝 Comentário adicionado ao chamado #{number}{files}.',
+    filesClause:   ' com arquivo(s)',
+    assignedTo:    '🧑 Atribuído a: {owner}',
+    notAssigned:   '—',
+    listTitle:     '📋 Meus chamados',
+    unassigned:    'Não atribuído',
   },
   es: {
+    greeting:      'Hola!',
     confirmPrompt: 'Confirma los detalles del ticket:',
     confirm:       'Confirmar',
     cancel:        'Cancelar',
     ticketLabel:   'Ticket',
+    statusLabel:   'Estado',
+    createdLabel:  '🕓 Creado',
+    updatedLabel:  '🕑 Ultima atualización',
     createdSuffix: 'creado correctamente.',
     cancelled:     '👍 Creación de ticket cancelada',
     parseError:    'Lo siento, no entendí. ¿Puedes aclarar?',
-    ticketClosed:  '✅ Ticket #{number} ha sido cerrado.'
+    ticketClosed:  '✅ Ticket #{number} ha sido cerrado.',
+    commentAdded:  '✅ Tu comentario fue agregado al ticket',
+    noAttachments: '⚠️ No se encontraron archivos adjuntos en tu mensaje.',
+    writeComment:  '✏️ Escribe un comentario.',
+    noTickets:     '🔍 No tienes tickets.',
+    viewInBrowser: '🔗 Ver en navegador',
+    edit:          '✏️ Editar',
+    close:         '✅ Cerrar',
+    prev:          '⬅️ Anterior',
+    next:          'Siguiente ➡️',
+    hideClosed:    '🙈 Ocultar cerrados',
+    showClosed:    '👁 Mostrar cerrados',
+    editPrompt:    '✏️ ¿Qué te gustaría agregar al ticket #{number}?',
+    commentFinal:  '📝 Comentario agregado al ticket #{number}{files}.',
+    filesClause:   ' con archivo(s)',
+    assignedTo:    '🧑 Asignado a: {owner}',
+    notAssigned:   '—',
+    listTitle:     '📋 Mis Tickets',
+    unassigned:    'No asignado'
   }
 };
+
+
+const firstPromptTemplates = {
+  en: `You are OrbIT, gathering info for a support ticket: "{summary}". 
+You always respond in the same language the user uses.
+Suggest self-help if possible but proceed to create the ticket when asked.
+Speak in first person in the summary.
+Only ask about the issue (no name/email prompts).`,
+  es: `Eres OrbIT, recopila info para un ticket de soporte: "{summary}". 
+Respondes siempre en el mismo idioma en que te habla el usuario.
+Ofreces sugerencias de autoayuda pero generas el ticket si te lo piden.
+Generas el resumen hablando en primera persona.
+Pregunta solo detalles del problema (no pidas nombre/correo).`,
+  pt: `Você é o OrbIT, reunindo informações para um chamado de suporte: "{summary}".
+Sempre responda no mesmo idioma usado pelo usuário.
+Sugira soluções se possível, mas crie o chamado se solicitado.
+Fale na primeira pessoa no resumo.
+Pergunte apenas sobre o problema (sem nome/email).`
+};
+
+
+const newChatGreetings = {
+  en:   `👋 Hi there! I’m **OrbIT**, your helpdesk assistant.\n\n
+
+🔔 I’ll keep you updated on:\n\n
+
+• Ticket assignments  
+• Status changes  
+• Internal notes\n\n
+
+No need to check email — I’ve got you covered here in Teams.`,
+
+  pt:   `👋 Olá! Sou o **OrbIT**, seu assistente de helpdesk.\n\n
+
+🔔 Vou te manter informado sobre:\n\n
+
+• Atribuições de chamados  
+• Mudanças de status  
+• Notas internas\n\n
+
+Não precisa checar o e-mail — aqui no Teams eu cuido disso para você.`,
+  
+  es:   `👋 ¡Hola! Soy **OrbIT**, tu asistente de mesa de ayuda.\n\n
+
+🔔 Te mantendré al tanto de:\n\n
+
+• Asignaciones de tickets  
+• Cambios de estado  
+• Notas internas\n\n
+
+No necesitas revisar el correo — aquí en Teams te tengo cubierto.`
+}
+
 
 class TeamsBot extends ActivityHandler {
   constructor(conversationState) {
@@ -89,15 +208,7 @@ class TeamsBot extends ActivityHandler {
             fullRef
           );
         }
-        await context.sendActivity(`👋 Hi there! I’m **OrbIT**, your helpdesk assistant.\n\n
-
-🔔 I’ll keep you updated on:\n\n
-
-• Ticket assignments  
-• Status changes  
-• Internal notes\n\n
-
-No need to check email — I’ve got you covered here in Teams.`);
+        await context.sendActivity(newChatGreetings[greetLang] || newChatGreetings.es);
       }
       await next();
     });
@@ -240,7 +351,7 @@ No need to check email — I’ve got you covered here in Teams.`);
     if (value && value.action === 'startEditTicket') {
       draft = { state: 'editing', ticketId: value.ticketId, history: [] };
       await this.draftAccessor.set(context, draft);
-      return await context.sendActivity(`✏️ What would you like to add to ticket #${value.ticketId}? You can also upload a file or screenshot.`);
+      return await context.sendActivity(L.editPrompt.replace('{number}', value.ticketId));
     }
 
     if (value && value.action === 'closeTicket') {
@@ -313,7 +424,7 @@ No need to check email — I’ve got you covered here in Teams.`);
       const ticketId = draft.ticketId;
       const teamsFiles = context.activity.attachments || [];
       if (teamsFiles.length === 0) {
-        await context.sendActivity("⚠️ No attachments found in your message.");
+        await context.sendActivity(L.noAttachments);
         return;
       }
       const creds = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
@@ -321,11 +432,11 @@ No need to check email — I’ve got you covered here in Teams.`);
       const { attachmentTokens, commentNote } = await this.processAttachments(context, token, userEmail);
       comment = `${comment}\n\n${commentNote}`.trim();
       if (!comment && attachmentTokens.length === 0) {
-        return await context.sendActivity("✏️ Escribe un comentario o adjunta un archivo.");
+        return await context.sendActivity(L.writeComment);
       }
       await addCommentToTicket(ticketId, comment || "Archivo adjunto desde Teams.", userEmail, attachmentTokens);
       await this.draftAccessor.set(context, { state: 'idle', history: [] });
-      return await context.sendActivity(`✅ Your comment has been added to ticket #${ticketId}.`);
+      return await context.sendActivity(`${L2?.commentAdded} #${ticketId}.`);
     }
 
     // 3) INTENT CLASSIFICATION
@@ -351,12 +462,8 @@ No need to check email — I’ve got you covered here in Teams.`);
         await this.draftAccessor.set(context, draft);
         await context.sendActivity({ type: 'typing' });
         let firstQ = '';
-        const firstPrompt =
-          `Eres OrbIT, recopila info para un ticket de soporte: "${info.summary}". ` +
-          `Respondes siempre en el mismo idioma en que te habla el usuario.` +
-          `Ofreces sugerencias de autoayuda pero generas el ticket de forma directa si te lo piden.` +
-          `Generas el summary hablando en primera persona.` +
-          `Pregunta solo detalles del problema (no pidas nombre/correo).`;
+        const firstPrompt = firstPromptTemplates[lang]?.replace('{summary}', info.summary)
+          || firstPromptTemplates.es.replace('{summary}', info.summary);
         await callAzureOpenAIStream(firstPrompt, lang, chunk => firstQ += chunk, { withRetrieval: true, topK: 5 });
         draft.history.push({ role: 'assistant', content: firstQ });
         await this.draftAccessor.set(context, draft);
@@ -368,23 +475,32 @@ No need to check email — I’ve got you covered here in Teams.`);
           const card = {
             type: 'AdaptiveCard',
             body: [
-              { type: 'TextBlock', text: `🔎 Ticket #${ticket.id}`, weight: 'Bolder', size: 'Medium' },
+              { type: 'TextBlock', text: `🔎 ${L.ticketLabel} #${ticket.id}`, weight: 'Bolder', size: 'Medium' },
               { type: 'TextBlock', text: `📌 *${ticket.title}*`, wrap: true },
-              { type: 'TextBlock', text: `🗂 Estado: **${ticket.state}**`, wrap: true },
-              { type: 'TextBlock', text: `🧑 Asignado a: ${ticket.owner_id || '—'}`, wrap: true },
-              { type: 'TextBlock', text: `🕓 Creado: ${new Date(ticket.created_at).toLocaleString()}`, wrap: true },
-              { type: 'TextBlock', text: `🕑 Última actualización: ${new Date(ticket.updated_at).toLocaleString()}`, wrap: true },
-              { type: 'TextBlock', text: `💬 ${ticket.article?.body || '—'}`, wrap: true }
+              { type: 'TextBlock', text: `🗂 ${L.statusLabel}: **${ticket.state}**`, wrap: true },
+              { 
+                type: 'TextBlock', 
+                text: L.assignedTo.replace(
+                  '{owner}',
+                  ticket.owner
+                    ? `${ticket.owner.firstname} ${ticket.owner.lastname}`
+                    : L.notAssigned
+                ),
+                wrap: true 
+              },
+              { type: 'TextBlock', text: `🕓 ${L.createdLabel}: ${new Date(ticket.created_at).toLocaleString()}`, wrap: true },
+              { type: 'TextBlock', text: `🕑 ${L.updatedLabel}: ${new Date(ticket.updated_at).toLocaleString()}`, wrap: true },
+              { type: 'TextBlock', text: `💬 ${ticket.article?.body || L.notAssigned}`, wrap: true }
             ],
             actions: [
               {
                 type: 'Action.OpenUrl',
-                title: '🔗 Ver en navegador',
+                title: L.viewInBrowser,
                 url: `${helpdeskWebUrl}/${ticket.id}`
               },
               ...(ticket.state !== 'closed' ? [{
                 type: 'Action.Submit',
-                title: '✅ Cerrar Ticket',
+                title: L.close,
                 data: {
                   action: 'closeTicket',
                   ticketId: ticket.id
@@ -412,10 +528,13 @@ No need to check email — I’ve got you covered here in Teams.`);
           let comment2 = value.comment?.trim() || '';
           comment2 = `${comment2}\n\n${commentNote}`.trim();
           if (!comment2 && attachmentTokens.length === 0) {
-            return await context.sendActivity("✏️ Escribe un comentario o adjunta un archivo.");
+            return await context.sendActivity(L.writeComment);
           }
           await addCommentToTicket(info.ticketId, comment2, userEmail, attachmentTokens);
-          return await context.sendActivity(`📝 Comentario agregado al ticket #${info.ticketId}${attachmentTokens.length ? ' con archivo(s).' : '.'}`);
+          const msg = L.commentFinal
+            .replace('{number}', info.ticketId)
+            .replace('{files}', attachmentTokens.length ? L.filesClause : '');
+          return await context.sendActivity(msg);
         }
         break;
       default:
@@ -434,7 +553,7 @@ No need to check email — I’ve got you covered here in Teams.`);
     const pageSize = 5;
     const tickets = await listTickets(userEmail, { openOnly: !showClosed });
     if (!tickets || tickets.length === 0) {
-      return await context.sendActivity("🔍 You have no tickets.");
+      return await context.sendActivity(L3.noTickets);
     }
 
     tickets.sort((a, b) => b.id - a.id);
@@ -446,7 +565,7 @@ No need to check email — I’ve got you covered here in Teams.`);
     const paginated = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
     const cardBody = [
-      { type: 'TextBlock', text: '📋 Your Tickets', weight: 'Bolder', size: 'Medium', wrap: true },
+      { type: 'TextBlock', text: L.listTitle, weight: 'Bolder', size: 'Medium', wrap: true },
       ...paginated.map(t => {
         const isClosed = t.state?.toLowerCase() === 'closed';
         const isNew = t.state?.toLowerCase() === 'new';
@@ -472,7 +591,7 @@ No need to check email — I’ve got you covered here in Teams.`);
               type: 'TextBlock',
               text: t.owner
                 ? `👨‍🔧 ${t.owner.firstname} ${t.owner.lastname || ''}`
-                : '👨‍🔧 Unassigned',
+                : `👨‍🔧 ${L.unassigned}`,
               spacing: 'None',
               isSubtle: true,
               wrap: true
@@ -482,12 +601,12 @@ No need to check email — I’ve got you covered here in Teams.`);
               actions: [
                 {
                   type: 'Action.OpenUrl',
-                  title: '🔗 View in browser',
+                  title: L.viewInBrowser,
                   url: `${helpdeskWebUrl}/${t.id}`
                 },
                 {
                   type: 'Action.Submit',
-                  title: '✏️ Edit',
+                  title: L.edit,
                   data: {
                     action: 'startEditTicket',
                     ticketId: t.id
@@ -495,7 +614,7 @@ No need to check email — I’ve got you covered here in Teams.`);
                 },
                 ...(!isClosed ? [{
                   type: 'Action.Submit',
-                  title: '✅ Close',
+                  title: L.close,
                   data: {
                     action: 'closeTicket',
                     ticketId: t.id
@@ -514,20 +633,20 @@ No need to check email — I’ve got you covered here in Teams.`);
     if (page > 0) {
       actions.push({
         type: 'Action.Submit',
-        title: '⬅️ Previous',
+        title: L.prev,
         data: { action: 'listTksPage', page: page - 1, showClosed }
       });
     }
     if (page < totalPages - 1) {
       actions.push({
         type: 'Action.Submit',
-        title: 'Next ➡️',
+        title: L.next,
         data: { action: 'listTksPage', page: page + 1, showClosed }
       });
     }
     actions.push({
       type: 'Action.Submit',
-      title: showClosed ? '🙈 Hide Closed' : '👁 Show Closed',
+      title: showClosed ? L.hideClosed : L.showClosed,
       data: {
         action: 'listTksPage',
         page: 0,
