@@ -2,7 +2,8 @@
 const {
   BotFrameworkAdapter,
   ConversationState,
-  MemoryStorage
+  MemoryStorage,
+  AutoSaveStateMiddleware
 } = require('botbuilder');
 const { TeamsBot } = require('../bot');
 
@@ -20,7 +21,7 @@ adapter.onTurnError = async (context, error) => {
 const memoryStorage    = new MemoryStorage();
 const conversationState = new ConversationState(memoryStorage);
 // ▶ Register auto-save middleware
-adapter.use(conversationState);
+adapter.use(new AutoSaveStateMiddleware(conversationState));
 
 // Bot
 const bot = new TeamsBot(conversationState);
@@ -29,7 +30,6 @@ const bot = new TeamsBot(conversationState);
 module.exports = function (context, req) {
   adapter.processActivity(req, context.res, async (turnContext) => {
     await bot.run(turnContext);
-    //await conversationState.saveChanges(turnContext);
   });
 };
 
