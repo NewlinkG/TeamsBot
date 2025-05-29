@@ -287,11 +287,11 @@ class TeamsBot extends ActivityHandler {
         }
         break;
       case 'listTks':
-        return await this.renderTicketListCard(context, 0, false);
+        return await this.renderTicketListCard(context, 0, false, lang);
       case 'listTksPage':
         const page = value.page || 0;
         const showClosed = !!value.showClosed;
-        return await this.renderTicketListCard(context, page, showClosed);
+        return await this.renderTicketListCard(context, page, showClosed, lang);
       case 'editTk':
         if (info.ticketId) {
           const creds2 = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
@@ -317,7 +317,7 @@ class TeamsBot extends ActivityHandler {
     }
   }
 
-  async renderTicketListCard(context, page = 0, showClosed = false) {
+  async renderTicketListCard(context, page = 0, showClosed = false, lang) {
     const locale = context.activity.locale || 'es-LA';
     const fallbackLang = detectLanguageFromLocale(locale);
     const lang = context.activity.value?.lang || fallbackLang;
