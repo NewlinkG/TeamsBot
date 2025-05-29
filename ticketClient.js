@@ -170,8 +170,16 @@ async function getTicketById(ticketId, userEmail) {
     const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}?expand=true`;
     const res = await axios.get(url, { headers });
     console.log(`Single Ticket data: ${JSON.stringify(res.data)}`);
-    const { ticket, article } = res.data;
-    ticket.article = article;
+
+    // If the API returned { ticket: { … }, article: { … } }, unwrap it…
+    const payload = res.data;
+    const ticket  = payload.ticket || payload;
+
+    // …but if there was an "article" block, attach it:
+    if (payload.article) {
+        ticket.article = payload.article;
+    }
+
     return ticket;
 }
 
