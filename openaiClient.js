@@ -214,12 +214,25 @@ async function callAzureOpenAIStream(input, detectedLanguage = "es", onDelta, op
 // ———————— Intent classifier ————————
 async function classifySupportRequest(userInput, detectedLanguage = "es") {
   const messages = buildMessages(userInput, detectedLanguage, true);
+
+  // LOG 1: Ver el mensaje final enviado a OpenAI
+  console.log('🧠 Prompt para clasificación:\n', JSON.stringify(messages, null, 2));
 								 
   const res = await callAzureOpenAI(messages, detectedLanguage);
+
+  // LOG 2: Ver la respuesta bruta del modelo
+  console.log('📨 Respuesta bruta de OpenAI:\n', res);
+  const match = res.match(/\{[\s\S]*?\}/);
+  if (!match) throw new Error("No se encontró un JSON válido en la respuesta del clasificador:\n" + res);
+
   try {
-    return JSON.parse(res.trim());
+    const parsed = JSON.parse(match[0]);
+    // LOG 3: Ver el JSON parseado
+    console.log('✅ Intento parseado:\n', parsed);
+    return parsed;
   } catch (err) {
-    throw new Error(`Error parsing JSON from classifier: ${res}`);
+    console.error(`❌ Error al parsear JSON:\n${match[0]}\nRespuesta completa:\n${res}`);
+    throw err;
   }
 }
 
