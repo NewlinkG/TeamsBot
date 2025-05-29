@@ -1,16 +1,11 @@
 const { ActivityHandler, CardFactory, TurnContext, TeamsInfo } = require('botbuilder');
-const {
-  callAzureOpenAI,
-  callAzureOpenAIStream,
-  classifySupportRequest
-} = require('./openaiClient');
+const { callAzureOpenAI, callAzureOpenAIStream, classifySupportRequest } = require('./openaiClient');
 const { createTicket, listTickets, addCommentToTicket, uploadAttachment, closeTicket, getTicketById } = require('./ticketClient');
 const { MicrosoftAppCredentials } = require('botframework-connector');
 const { getReference, saveFullReference } = require('./teamsIdStore');
 const axios = require('axios');
 const { i18n, firstPromptTemplates, newChatGreetings, getSystemPrompt } = require('./prompts');
 const { getTicketListCardBody, getConfirmTicketCard, getCancelTicketCard, getFinalTicketCard, getSingleTicketCard } = require('./cardTemplates');
-
 const helpdeskWebUrl = process.env.HELPDESK_WEB_URL;
 if (!helpdeskWebUrl) throw new Error('Missing HELPDESK_WEB_URL env var');
 
@@ -19,7 +14,6 @@ function detectLanguageFromLocale(locale) {
   if (locale.startsWith('pt')) return 'pt';
   return 'es';
 }
-
 
 class TeamsBot extends ActivityHandler {
   constructor(conversationState) {
@@ -67,13 +61,8 @@ class TeamsBot extends ActivityHandler {
     this.onMessage(this.handleMessage.bind(this));
   }
 
-  async processAttachments(context, token, userEmail) {
-    const locale = context.activity.locale || 'es-LA';
-    // Teams locale is something like "es-ES" or "en-US"
-    const fallbackLang = detectLanguageFromLocale(locale);
-    // But if the card carried an ISO code, use that first:
-    const lang = context.activity.value?.lang || fallbackLang;
-    const L      = i18n[lang];
+  async processAttachments(context, token, userEmail, lang) {
+    let L = i18n[lang];
     const attachmentTokens = [];
     let commentNote = '';
     const teamsFiles = context.activity.attachments || [];
@@ -183,7 +172,7 @@ class TeamsBot extends ActivityHandler {
     }
 
     if (value && value.action === 'startEditTicket') {
-      draft = { state: 'editing', ticketId: value.ticketId, history: [] };
+      draft = { state: 'editing', ticketId: value.ticketId, lang: value.lang, history: [] };
       await this.draftAccessor.set(context, draft);
       return await context.sendActivity(L.editPrompt.replace('{number}', value.ticketId));
     }
@@ -222,6 +211,8 @@ class TeamsBot extends ActivityHandler {
     }
 
     if (draft.state === 'editing') {
+      let lang = draft.lang || fallbackLang;
+      let L    = i18n[lang];
       const userName  = context.activity.from.name;
       const userEmail = context.activity.from.email
         || `${userName.replace(/\s+/g,'.').toLowerCase()}@newlink-group.com`;
@@ -234,14 +225,14 @@ class TeamsBot extends ActivityHandler {
       }
       const creds = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
       const token = await creds.getToken();
-      const { attachmentTokens, commentNote } = await this.processAttachments(context, token, userEmail);
+      const { attachmentTokens, commentNote } = await this.processAttachments(context, token, userEmail, lang);
       comment = `${comment}\n\n${commentNote}`.trim();
       if (!comment && attachmentTokens.length === 0) {
         return await context.sendActivity(L.writeComment);
       }
       await addCommentToTicket(ticketId, comment || `${L.attachedFile}: `, userEmail, attachmentTokens);
       await this.draftAccessor.set(context, { state: 'idle', history: [] });
-      return await context.sendActivity(`${L?.commentAdded} #${ticketId}.`);
+      return await context.sendActivity(`${L.commentAdded.replace('{number}', ticketId)}`);
     }
 
     // 3) INTENT CLASSIFICATION
@@ -296,7 +287,7 @@ class TeamsBot extends ActivityHandler {
         if (info.ticketId) {
           const creds2 = new MicrosoftAppCredentials(process.env.MicrosoftAppId, process.env.MicrosoftAppPassword);
           const token2 = await creds2.getToken();
-          const { attachmentTokens, commentNote } = await this.processAttachments(context, token2, userEmail);
+          const { attachmentTokens, commentNote } = await this.processAttachments(context, token2, userEmail, lang);
           let comment2 = value.comment?.trim() || '';
           comment2 = `${comment2}\n\n${commentNote}`.trim();
           if (!comment2 && attachmentTokens.length === 0) {
@@ -384,7 +375,6 @@ class TeamsBot extends ActivityHandler {
   
   async extractInlineImagesFromHtml(html, token, userEmail) {
     const attachmentTokens = [];
-
     const imgRegex = /<img[^>]+src="([^"]+)"/g;
     const matches = [...html.matchAll(imgRegex)];
 
@@ -412,7 +402,6 @@ class TeamsBot extends ActivityHandler {
         console.warn("❌ Failed to download inline image:", imageUrl, err.message);
       }
     }
-
     return attachmentTokens;
   }
 }
