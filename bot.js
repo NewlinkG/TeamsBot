@@ -321,7 +321,7 @@ class TeamsBot extends ActivityHandler {
     const locale = context.activity.locale || 'es-LA';
     const fallbackLang = detectLanguageFromLocale(locale);
     lang = context.activity.value?.lang || fallbackLang;
-    L = i18n[lang];
+    let L = i18n[lang];
     const userName = context.activity.from.name;
     const userEmail = context.activity.from.email
       || `${userName.replace(/\s+/g, '.').toLowerCase()}@newlink-group.com`;
