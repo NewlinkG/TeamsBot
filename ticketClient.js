@@ -162,17 +162,17 @@ async function listTickets(email, { openOnly = true } = {}) {
 
 
 async function getTicketById(ticketId, userEmail) {
-  const headers = {
-    Authorization: `Token token=${HELP_DESK_TOKEN}`,
-    'Content-Type': 'application/json',
-    From: userEmail
-  };
-
-  const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}?expand=true`;
-
-  const res = await axios.get(url, { headers });
-  console.log(`Single Ticket data: ${res}`);
-  return res.data;
+    const headers = {
+        Authorization: `Token token=${HELP_DESK_TOKEN}`,
+        'Content-Type': 'application/json',
+        From: userEmail
+    };
+    const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}?expand=true`;
+    const res = await axios.get(url, { headers });
+    console.log(`Single Ticket data: ${JSON.stringify(res.data)}`);
+    const { ticket, article } = res.data;
+    ticket.article = article;
+    return ticket;
 }
 
 

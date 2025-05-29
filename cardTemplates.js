@@ -121,8 +121,9 @@ function getSingleTicketCard(ticket, L, lang, helpdeskWebUrl) {
       { 
         type: 'TextBlock', 
         text: L.assignedTo.replace(
-          '{owner}',
-          ticket.owner ? `${ticket.owner.firstname} ${ticket.owner.lastname}` : L.notAssigned
+          '{owner}', ticket.owner 
+            ? `${ticket.owner.firstname} ${ticket.owner.lastname}` 
+            : L.notAssigned
         ),
         wrap: true 
       },
