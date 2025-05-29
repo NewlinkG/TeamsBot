@@ -31,7 +31,8 @@ const i18n = {
     notAssigned:   '—',
     listTitle:     '📋 My Tickets',
     unassigned:    'Unassigned',
-    attachedFile:  '🔗 Attached file'
+    attachedFile:  '🔗 Attached file',
+    askForTicketId:'Please give me the ticket number'
   },
   pt: {
     greeting:      'Olá!',
@@ -64,7 +65,8 @@ const i18n = {
     notAssigned:   '—',
     listTitle:     '📋 Meus chamados',
     unassigned:    'Não atribuído',
-    attachedFile:  '🔗 Arquivo compartilhado'
+    attachedFile:  '🔗 Arquivo compartilhado',
+    askForTicketId:'Numerao de ticket?'
   },
   es: {
     greeting:      'Hola!',
@@ -97,7 +99,8 @@ const i18n = {
     notAssigned:   '—',
     listTitle:     '📋 Mis Tickets',
     unassigned:    'No asignado',
-    attachedFile:  '🔗 Archivo compartido'
+    attachedFile:  '🔗 Archivo compartido',
+    askForTicketId:'Por favor dime el número de ticket'
   }
 };
 

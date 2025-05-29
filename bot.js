@@ -127,7 +127,7 @@ class TeamsBot extends ActivityHandler {
     const text   = (context.activity.text || '').trim();
     const locale = context.activity.locale || 'es-LA';
     const fallbackLang = detectLanguageFromLocale(locale);
-    const lang = context.activity.value?.lang || fallbackLang;
+    let lang = context.activity.value?.lang || fallbackLang;
     const L = i18n[lang];
     const userId = context.activity.from.id;
     let upn = context.activity.from.userPrincipalName;
@@ -285,7 +285,7 @@ class TeamsBot extends ActivityHandler {
           const singleCard = getSingleTicketCard(ticket, L, lang, helpdeskWebUrl);
           return await context.sendActivity({ attachments: [CardFactory.adaptiveCard(singleCard)] });
         }
-        break;
+        return await context.sendActivity(L.askForTicketId);   // e.g. “Por favor dime el número de ticket”
       case 'listTks':
         return await this.renderTicketListCard(context, 0, false, lang);
       case 'listTksPage':
@@ -308,7 +308,7 @@ class TeamsBot extends ActivityHandler {
             .replace('{files}', attachmentTokens.length ? L.filesClause : '');
           return await context.sendActivity(msg);
         }
-        break;
+        return await context.sendActivity(L.askForTicketId);
       default:
         await context.sendActivity({ type: 'typing' });
         let reply2 = '';
@@ -381,6 +381,7 @@ class TeamsBot extends ActivityHandler {
       return await context.sendActivity(cardMessage);
     }
   }
+  
   async extractInlineImagesFromHtml(html, token, userEmail) {
     const attachmentTokens = [];
 
