@@ -98,6 +98,7 @@ async function listTickets(email, { openOnly = true } = {}) {
     const userRes = await axios.get(userUrl, { headers });
     if (Array.isArray(userRes.data) && userRes.data.length > 0) {
       customerId = userRes.data[0].id;
+      console.log(`User data: ${userRes.data}`);
     } else {
       console.warn(`⚠️ No user found for email: ${email}`);
       return [];
@@ -126,6 +127,7 @@ async function listTickets(email, { openOnly = true } = {}) {
     hasMore = batch.length > 0;
     page++;
   }
+  console.log(`TICKETS: \n ${allTickets}`);
 
   // Step 4: Fetch owner names (optional)
   const ownerIds = [...new Set(allTickets.map(t => t.owner_id).filter(Boolean))];
@@ -169,6 +171,7 @@ async function getTicketById(ticketId, userEmail) {
   const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}?expand=true`;
 
   const res = await axios.get(url, { headers });
+  console.log(`Single Ticket data: ${res}`);
   return res.data;
 }
 

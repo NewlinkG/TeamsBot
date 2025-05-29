@@ -6,7 +6,7 @@
  * @param {Object} L – Objeto de localización (i18n[lang]).
  * @returns {Array} Array de elementos para AdaptiveCard body.
  */
-function getTicketListCardBody(paginated, L) {
+function getTicketListCardBody(paginated, L, lang) {
   return [
     { type: 'TextBlock', text: L.listTitle, weight: 'Bolder', size: 'Medium', wrap: true },
     ...paginated.map(t => {
@@ -44,13 +44,13 @@ function getTicketListCardBody(paginated, L) {
               {
                 type: 'Action.Submit',
                 title: L.edit,
-                data: { action: 'startEditTicket', ticketId: t.id, lang: L.lang }
+                data: { action: 'startEditTicket', ticketId: t.id, lang: lang }
               },
               ...(!isClosed
                 ? [{
                     type: 'Action.Submit',
                     title: L.close,
-                    data: { action: 'closeTicket', ticketId: t.id, lang: L.lang }
+                    data: { action: 'closeTicket', ticketId: t.id, lang: lang }
                   }]
                 : [])
             ],
@@ -82,7 +82,7 @@ function getConfirmTicketCard(title, summary, lang, L) {
 }
 
 // Generate cancellation card
-function getCancelTicketCard(title, summary, L) {
+function getCancelTicketCard(title, summary, lang, L) {
   return {
     type: 'AdaptiveCard',
     body: [
@@ -111,7 +111,7 @@ function getFinalTicketCard(title, summary, ticketId, helpdeskWebUrl, L) {
 }
 
 // Generate single ticket card
-function getSingleTicketCard(ticket, L, helpdeskWebUrl) {
+function getSingleTicketCard(ticket, L, lang, helpdeskWebUrl) {
   return {
     type: 'AdaptiveCard',
     body: [
@@ -139,7 +139,7 @@ function getSingleTicketCard(ticket, L, helpdeskWebUrl) {
       ...(ticket.state !== 'closed' ? [{
         type: 'Action.Submit',
         title: L.close,
-        data: { action: 'closeTicket', ticketId: ticket.id }
+        data: { action: 'closeTicket', ticketId: ticket.id, lang }
       }] : [])
     ],
     $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',

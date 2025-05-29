@@ -128,7 +128,7 @@ class TeamsBot extends ActivityHandler {
     const locale = context.activity.locale || 'es-LA';
     const fallbackLang = detectLanguageFromLocale(locale);
     const lang = context.activity.value?.lang || fallbackLang;
-    const L      = i18n[lang];
+    const L = i18n[lang];
     const userId = context.activity.from.id;
     let upn = context.activity.from.userPrincipalName;
     if (!upn) {
@@ -175,7 +175,7 @@ class TeamsBot extends ActivityHandler {
 
     if (value && value.action === 'cancelTicket') {
       const { title, summary } = value;
-      const cancelCard = getCancelTicketCard(value.title, value.summary, L);
+      const cancelCard = getCancelTicketCard(value.title, value.summary, lang, L);
       await context.updateActivity({ id: context.activity.replyToId, type: 'message', attachments: [ CardFactory.adaptiveCard(cancelCard) ] });
       draft = { state: 'idle', history: [] };
       await this.draftAccessor.set(context, draft);
@@ -282,7 +282,7 @@ class TeamsBot extends ActivityHandler {
       case 'singleTk':
         if (info.ticketId) {
           const ticket = await getTicketById(info.ticketId, userEmail);
-          const singleCard = getSingleTicketCard(ticket, L, helpdeskWebUrl);
+          const singleCard = getSingleTicketCard(ticket, L, lang, helpdeskWebUrl);
           return await context.sendActivity({ attachments: [CardFactory.adaptiveCard(singleCard)] });
         }
         break;
@@ -336,7 +336,7 @@ class TeamsBot extends ActivityHandler {
       : tickets.filter(t => t.state?.toLowerCase() !== 'closed');
     const totalPages = Math.ceil(filtered.length / pageSize);
     const paginated = filtered.slice(page * pageSize, (page + 1) * pageSize);
-    const cardBody = getTicketListCardBody(paginated, L);
+    const cardBody = getTicketListCardBody(paginated, L, lang);
     const actions = [];
     if (page > 0) {
       actions.push({
