@@ -167,21 +167,44 @@ async function getTicketById(ticketId, userEmail) {
         'Content-Type': 'application/json',
         From: userEmail
     };
-    const url = `${HELP_DESK_URL.replace(/\/+$/, '')}/tickets/${ticketId}?expand=true`;
-    const res = await axios.get(url, { headers });
-    console.log(`Single Ticket data: ${JSON.stringify(res.data)}`);
+    const baseUrl = HELP_DESK_URL.replace(/\/+$/, '');
 
-    // If the API returned { ticket: { … }, article: { … } }, unwrap it…
-    const payload = res.data;
+    // 1) Fetch ticket (wrapped or flat)
+    const ticketRes = await axios.get(
+        `${baseUrl}/tickets/${ticketId}?expand=true`,
+        { headers }
+    );
+    console.log(`Single Ticket data: ${JSON.stringify(ticketRes.data)}`);
+    const payload = ticketRes.data;
     const ticket  = payload.ticket || payload;
 
-    // …but if there was an "article" block, attach it:
+    // 2) Fetch owner details by owner_id
+    if (ticket.owner_id) {
+        try {
+            const ownerRes = await axios.get(
+                `${baseUrl}/users/${ticket.owner_id}`,
+                { headers }
+            );
+            const u = ownerRes.data;
+            ticket.owner = {
+                firstname: u.firstname,
+                lastname: u.lastname,
+                email: u.email,
+            };
+        } catch (err) {
+            console.warn(`Could not fetch owner ${ticket.owner_id}:`, err);
+            ticket.owner = null;
+        }
+    }
+
+    // 3) If there was an article block, attach it
     if (payload.article) {
         ticket.article = payload.article;
     }
 
     return ticket;
 }
+
 
 
 async function uploadAttachment(file, userEmail) {
