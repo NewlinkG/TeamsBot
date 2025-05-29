@@ -247,7 +247,13 @@ class TeamsBot extends ActivityHandler {
     // 3) INTENT CLASSIFICATION
     let info;
     try {
-      info = (value && value.action === 'listTksPage') ? { intent: 'listTksPage' } : await classifySupportRequest(text, lang);
+      info = (value && value.action === 'listTksPage')
+        ? { intent: 'listTksPage', lang: value?.lang } // 👈 agregá esto
+        : await classifySupportRequest(text, lang);
+      if (info.lang) {
+        lang = info.lang;
+        L = i18n[lang];
+      }
     } catch {
       await context.sendActivity({ type: 'typing' });
       let reply = '';
