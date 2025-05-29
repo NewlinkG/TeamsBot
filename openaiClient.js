@@ -70,7 +70,7 @@ const CLASSIFIER_PROMPTS = {
     "title": "...",         // (only for createTk)
     "summary": "...",       // (only for createTk)
     "ticketId": 123,        // (only for editTk and singleTk)
-    "comment": "..."        // (only for editTk and singleTk, optional)
+    "comment": "...",        // (only for editTk and singleTk, optional)
     "lang":"<iso>"
   }
 
@@ -91,7 +91,7 @@ const CLASSIFIER_PROMPTS = {
     "title": "...",         // (solo para createTk)
     "summary": "...",       // (solo para createTk)
     "ticketId": 123,        // (solo para editTk y singleTk)
-    "comment": "..."        // (solo para editTk y singleTk, opcional)
+    "comment": "...",        // (solo para editTk y singleTk, opcional)
     "lang":"<iso>"
   }
 
@@ -112,7 +112,7 @@ const CLASSIFIER_PROMPTS = {
     "title": "...",         // (somente para createTk)
     "summary": "...",       // (somente para createTk)
     "ticketId": 123,        // (somente para editTk e singleTk)
-    "comment": "..."        // (somente para editTk e singleTk, opcional)
+    "comment": "...",        // (somente para editTk e singleTk, opcional)
     "lang":"<iso>"
   }
 
