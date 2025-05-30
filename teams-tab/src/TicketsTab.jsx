@@ -53,7 +53,7 @@ export default function TicketsTab() {
 
   function openCommentModal(ticketId, isClose = false) {
     dialog.url.open({
-      url: `${window.location.origin}/comment?ticketId=${ticketId}&isClose=${isClose}`,
+      url: `${window.location.origin}/#/comment?ticketId=${ticketId}&isClose=${isClose}`, // <== add "/#/"
       title: isClose ? "Cerrar Ticket" : "Agregar Comentario",
       size: { width: 400, height: 350 }
     }, async (result) => {
