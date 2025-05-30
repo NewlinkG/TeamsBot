@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import * as microsoftTeams from "@microsoft/teams-js";
+import { useEffect, useState } from "react";
+import { dialog, app } from "@microsoft/teams-js";
 import axios from "axios";
 
 export default function TicketsTab() {
@@ -21,16 +21,14 @@ export default function TicketsTab() {
   const isActiveState = (state) =>
     ["new", "open", "pending close", "pending reminder"].includes(state?.toLowerCase());
 
-
   useEffect(() => {
-    microsoftTeams.app.initialize().then(() => {
-      microsoftTeams.app.getContext().then(async (context) => {
+    app.initialize().then(() => {
+      app.getContext().then(async (context) => {
         const upn = context.user.userPrincipalName;
         const userEmail = upn.replace(/@.*$/, "@newlink-group.com");
         setEmail(userEmail);
         setTheme(context.app?.theme || "default");
 
-        // 👇 Determine what to fetch based on filter
         const openOnly = filterState === "active";
         const res = await axios.get(
           `/api/tickets?email=${encodeURIComponent(userEmail)}&openOnly=${openOnly}`
@@ -39,11 +37,44 @@ export default function TicketsTab() {
         setLoading(false);
       });
 
-      microsoftTeams.app.registerOnThemeChangeHandler((newTheme) => {
+      app.registerOnThemeChangeHandler((newTheme) => {
         setTheme(newTheme);
       });
     });
   }, [filterState]);
+
+  async function refreshTickets() {
+    setLoading(true);
+    const openOnly = filterState === "active";
+    const res = await axios.get(`/api/tickets?email=${encodeURIComponent(email)}&openOnly=${openOnly}`);
+    setTickets(res.data || []);
+    setLoading(false);
+  }
+
+  function openCommentModal(ticketId, isClose = false) {
+    dialog.url.open({
+      url: `${window.location.origin}/comment?ticketId=${ticketId}&isClose=${isClose}`,
+      title: isClose ? "Cerrar Ticket" : "Agregar Comentario",
+      size: { width: 400, height: 350 }
+    }, async (result) => {
+      if (result?.comment?.trim()) {
+        const endpoint = isClose
+          ? `/api/messages/${ticketId}/close`
+          : `/api/messages/${ticketId}/comment`;
+        try {
+          await axios.post(endpoint, {
+            email,
+            comment: result.comment.trim()
+          });
+          alert(`✅ Ticket ${isClose ? "cerrado" : "comentado"}.`);
+          refreshTickets();
+        } catch (err) {
+          alert(`❌ Falló al ${isClose ? "cerrar" : "comentar"} el ticket.`);
+          console.error(err);
+        }
+      }
+    });
+  }
 
   if (loading) return <p>Loading...</p>;
 
@@ -79,18 +110,15 @@ export default function TicketsTab() {
                 const state = t.state?.toLowerCase();
                 if (filterState === "active") return isActiveState(state);
                 if (filterState === "closed") return ["closed", "removed"].includes(state);
-                return true; // all
+                return true;
               })
               .map((t) => (
                 <tr key={t.id} style={{ opacity: t.state?.toLowerCase() === "closed" ? 0.5 : 1 }}>
                   <td>{t.id}</td>
                   <td>{t.title}</td>
                   <td>
-                    <span
-                      style={{ whiteSpace: "nowrap", position: "relative", display: "inline-block" }}
-                    >
+                    <span style={{ whiteSpace: "nowrap", position: "relative", display: "inline-block" }}>
                       {stateIcons[t.state?.toLowerCase()] || ""}
-
                       <span
                         style={{
                           visibility: "hidden",
@@ -101,7 +129,7 @@ export default function TicketsTab() {
                           padding: "4px 8px",
                           position: "absolute",
                           zIndex: 1,
-                          bottom: "125%", // above the icon
+                          bottom: "125%",
                           left: "50%",
                           transform: "translateX(-50%)",
                           whiteSpace: "nowrap",
@@ -128,38 +156,4 @@ export default function TicketsTab() {
       )}
     </div>
   );
-
-  function openCommentModal(ticketId, isClose = false) {
-    microsoftTeams.dialog.open({
-      url: `${window.location.origin}/comment?ticketId=${ticketId}&isClose=${isClose}`,
-      title: isClose ? "Cerrar Ticket" : "Agregar Comentario",
-      size: { width: 400, height: 350 },
-      fallbackUrl: "",
-      onClose: async (result, reason) => {
-        if (reason === "completed" && result?.comment) {
-          const action = isClose ? "close" : "comment";
-          try {
-            const endpoint = isClose ? `/api/tickets/${ticketId}/close` : `/api/tickets/${ticketId}/comment`;
-            await axios.put(endpoint, {
-              email,
-              comment: result.comment
-            });
-            alert(`✅ Ticket ${isClose ? "cerrado" : "comentado"}.`);
-            refreshTickets(); // refresh to reflect changes
-          } catch (err) {
-            alert(`❌ Falló al ${isClose ? "cerrar" : "comentar"} el ticket.`);
-            console.error(err);
-          }
-        }
-      }
-    });
-  }
-
-  async function refreshTickets() {
-  setLoading(true);
-  const openOnly = filterState === "active";
-  const res = await axios.get(`/api/tickets?email=${encodeURIComponent(email)}&openOnly=${openOnly}`);
-  setTickets(res.data || []);
-  setLoading(false);
-}
 }

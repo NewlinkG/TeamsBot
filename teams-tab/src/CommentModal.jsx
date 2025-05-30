@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { microsoftTeams } from "@microsoft/teams-js";
+import { useState, useEffect } from "react";
+import { dialog } from "@microsoft/teams-js";
 
 export default function CommentModal() {
   const [comment, setComment] = useState("");
@@ -13,7 +13,7 @@ export default function CommentModal() {
   }, []);
 
   const submitComment = () => {
-    microsoftTeams.dialog.submit({ ticketId, comment });
+    dialog.url.submit({ ticketId, comment });
   };
 
   if (!ticketId) return <p>Cargando ticket...</p>;
