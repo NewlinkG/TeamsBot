@@ -2,14 +2,14 @@ const fs = require("fs");
 const path = require("path");
 
 module.exports = async function (context, req) {
-  let filePath = path.join(__dirname, "../tabs-portal", req.params.file || "index.html");
+  const fileName = req.params.file;
 
-  if (!fs.existsSync(filePath)) {
-    context.res = {
-      status: 404,
-      body: "Not found"
-    };
-    return;
+  // Default to index.html
+  let filePath = path.join(__dirname, "../tabs-portal", fileName || "index.html");
+
+  // If the file does not exist or is a route (like 'comment'), fallback to index.html
+  if (!fileName || !fs.existsSync(filePath)) {
+    filePath = path.join(__dirname, "../tabs-portal/index.html");
   }
 
   const contentType = filePath.endsWith(".js")
