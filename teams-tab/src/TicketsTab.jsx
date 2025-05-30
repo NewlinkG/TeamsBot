@@ -116,9 +116,9 @@ export default function TicketsTab() {
                   <td>{t.owner ? `${t.owner.firstname} ${t.owner.lastname || ""}` : "—"}</td>
                   <td>
                     <a href={`https://helpdesk.newlink-group.com/#ticket/zoom/${t.id}`} target="_blank" rel="noreferrer">🔗</a>&nbsp;
-                    <button onClick={() => promptComment(t.id)}>✏️</button>&nbsp;
+                    <button onClick={() => openCommentModal(t.id, false)}>✏️</button>&nbsp;
                     {t.state?.toLowerCase() !== "closed" && (
-                      <button onClick={() => closeTicket(t.id)}>✅</button>
+                      <button onClick={() => openCommentModal(t.id, true)}>✅</button>
                     )}
                   </td>
                 </tr>
@@ -129,38 +129,37 @@ export default function TicketsTab() {
     </div>
   );
 
-  function promptComment(ticketId) {
-    const comment = prompt(`Agregar comentario al ticket #${ticketId}:`);
-    if (!comment) return;
-
-    // POST al backend para agregar comentario
-    axios.post(`/api/tickets/${ticketId}/comment`, { email, comment })
-      .then(() => {
-        alert("✅ Comentario agregado.");
-      })
-      .catch(() => {
-        alert("❌ Falló al agregar el comentario.");
-      });
-
-    // Abrir chat con el bot en caso de que el usuario necesite más interacción
-    const chatUrl = `https://teams.microsoft.com/l/chat/0/0?users=${email}&message=/edit ${ticketId}`;
-    if (window.confirm("¿Querés abrir el chat con el bot para continuar la edición?")) {
-      window.open(chatUrl, "_blank");
-    }
+  function openCommentModal(ticketId, isClose = false) {
+    microsoftTeams.dialog.open({
+      url: `${window.location.origin}/comment?ticketId=${ticketId}&isClose=${isClose}`,
+      title: isClose ? "Cerrar Ticket" : "Agregar Comentario",
+      size: { width: 400, height: 350 },
+      fallbackUrl: "",
+      onClose: async (result, reason) => {
+        if (reason === "completed" && result?.comment) {
+          const action = isClose ? "close" : "comment";
+          try {
+            const endpoint = isClose ? `/api/tickets/${ticketId}/close` : `/api/tickets/${ticketId}/comment`;
+            await axios.put(endpoint, {
+              email,
+              comment: result.comment
+            });
+            alert(`✅ Ticket ${isClose ? "cerrado" : "comentado"}.`);
+            refreshTickets(); // refresh to reflect changes
+          } catch (err) {
+            alert(`❌ Falló al ${isClose ? "cerrar" : "comentar"} el ticket.`);
+            console.error(err);
+          }
+        }
+      }
+    });
   }
 
-  function closeTicket(ticketId) {
-    if (!window.confirm(`¿Cerrar el ticket #${ticketId}?`)) return;
-
-    axios.post(`/api/tickets/${ticketId}/close`, { email })
-      .then(() => {
-        alert("✅ Ticket cerrado.");
-        setTickets(tickets.map(t =>
-          t.id === ticketId ? { ...t, state: "closed" } : t
-        ));
-      })
-      .catch(() => {
-        alert("❌ Falló al cerrar el ticket.");
-      });
-  }
+  async function refreshTickets() {
+  setLoading(true);
+  const openOnly = filterState === "active";
+  const res = await axios.get(`/api/tickets?email=${encodeURIComponent(email)}&openOnly=${openOnly}`);
+  setTickets(res.data || []);
+  setLoading(false);
+}
 }

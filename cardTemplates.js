@@ -127,8 +127,8 @@ function getSingleTicketCard(ticket, L, lang, helpdeskWebUrl) {
         ),
         wrap: true 
       },
-      { type: 'TextBlock', text: `🕓 ${new Date(ticket.created_at).toLocaleString()}`, wrap: true },
-      { type: 'TextBlock', text: `🕑 ${new Date(ticket.updated_at).toLocaleString()}`, wrap: true },
+      //{ type: 'TextBlock', text: `🕓 ${new Date(ticket.created_at).toLocaleString()}`, wrap: true },
+      //{ type: 'TextBlock', text: `🕑 ${new Date(ticket.updated_at).toLocaleString()}`, wrap: true },
       { type: 'TextBlock', text: `💬 ${ticket.article?.body || L.notAssigned}`, wrap: true }
     ],
     actions: [
