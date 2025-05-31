@@ -54,7 +54,7 @@ export default function TicketsTab() {
   function openCommentModal(ticketId, isClose = false) {
     dialog.url.open({
       url: `${window.location.origin}/api/tabs/#/comment?ticketId=${ticketId}&isClose=${isClose}`, // <== add "/#/"
-      title: isClose ? "Cerrar Ticket" : "Agregar Comentario",
+      title: isClose ? "Close ticket" : "Add Comment",
       size: { width: 400, height: 350 }
     }, async (result) => {
       if (result?.comment?.trim()) {
@@ -66,10 +66,10 @@ export default function TicketsTab() {
             email,
             comment: result.comment.trim()
           });
-          alert(`✅ Ticket ${isClose ? "cerrado" : "comentado"}.`);
+          alert(`✅ Ticket ${isClose ? "closed" : "updated"}.`);
           refreshTickets();
         } catch (err) {
-          alert(`❌ Falló al ${isClose ? "cerrar" : "comentar"} el ticket.`);
+          alert(`❌ Error while ${isClose ? "closing" : "updating"} the ticket.`);
           console.error(err);
         }
       }

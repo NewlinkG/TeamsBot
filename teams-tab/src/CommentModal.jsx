@@ -7,7 +7,9 @@ export default function CommentModal() {
   const [isClose, setIsClose] = useState(false);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
+    const hash = window.location.hash;
+    const queryString = hash.includes('?') ? hash.split('?')[1] : '';
+    const urlParams = new URLSearchParams(queryString);
     setTicketId(urlParams.get("ticketId"));
     setIsClose(urlParams.get("isClose") === "true");
   }, []);
@@ -16,7 +18,7 @@ export default function CommentModal() {
     dialog.url.submit({ ticketId, comment });
   };
 
-  if (!ticketId) return <p>Cargando ticket...</p>;
+  if (!ticketId) return <p>Loading ticket...</p>;
 
   return (
     <div style={{ padding: "1rem", fontFamily: "Segoe UI" }}>
