@@ -8,11 +8,18 @@ export default function CommentModal() {
 
   useEffect(() => {
     const hash = window.location.hash;
+    console.log("🚀 Full hash:", hash); // debug line
+
     const queryString = hash.includes('?') ? hash.split('?')[1] : '';
+    console.log("🔍 Query string:", queryString); // debug line
+
     const urlParams = new URLSearchParams(queryString);
+    console.log("✅ ticketId:", urlParams.get("ticketId")); // debug line
+
     setTicketId(urlParams.get("ticketId"));
     setIsClose(urlParams.get("isClose") === "true");
   }, []);
+
 
   const submitComment = () => {
     dialog.url.submit({ ticketId, comment });
