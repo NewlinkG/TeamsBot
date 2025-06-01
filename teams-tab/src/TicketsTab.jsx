@@ -60,8 +60,10 @@ export default function TicketsTab() {
       if (result?.ticketId) {
         const { ticketId, comment, isClose } = result;
         const endpoint = isClose
-          ? `/api/messages/${ticketId}/close`
-          : `/api/messages/${ticketId}/comment`;
+          ? `/api/tickets/${ticketId}/close`
+          : `/api/tickets/${ticketId}/comment`;
+        console.log("📦 Submitting to:", endpoint);
+        console.log("📨 Payload:", { email, comment });
         try {
           await axios.post(endpoint, {
             email,
