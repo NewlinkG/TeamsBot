@@ -57,14 +57,15 @@ export default function TicketsTab() {
       title: isClose ? "Close ticket" : "Add Comment",
       size: { width: 400, height: 350 }
     }, async (result) => {
-      if (result?.comment?.trim()) {
+      if (result?.ticketId) {
+        const { ticketId, comment, isClose } = result;
         const endpoint = isClose
           ? `/api/messages/${ticketId}/close`
           : `/api/messages/${ticketId}/comment`;
         try {
           await axios.post(endpoint, {
             email,
-            comment: result.comment.trim()
+            comment: comment?.trim() || ""
           });
           alert(`✅ Ticket ${isClose ? "closed" : "updated"}.`);
           refreshTickets();

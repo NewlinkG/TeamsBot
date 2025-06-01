@@ -22,7 +22,7 @@ export default function CommentModal() {
 
 
   const submitComment = () => {
-    dialog.url.submit({ ticketId, comment });
+    dialog.url.submit({ ticketId, comment, isClose });
   };
 
   if (!ticketId) return <p>Loading ticket...</p>;
