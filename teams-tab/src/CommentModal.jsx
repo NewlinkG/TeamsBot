@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { dialog } from "@microsoft/teams-js";
+import { dialog, app } from "@microsoft/teams-js";
 
 export default function CommentModal() {
   const [comment, setComment] = useState("");
@@ -7,22 +7,29 @@ export default function CommentModal() {
   const [isClose, setIsClose] = useState(false);
 
   useEffect(() => {
-    const hash = window.location.hash;
-    console.log("🚀 Full hash:", hash); // debug line
+    app.initialize().then(() => {
+      const hash = window.location.hash;
+      const queryString = hash.includes('?') ? hash.split('?')[1] : '';
+      const urlParams = new URLSearchParams(queryString);
 
-    const queryString = hash.includes('?') ? hash.split('?')[1] : '';
-    console.log("🔍 Query string:", queryString); // debug line
-
-    const urlParams = new URLSearchParams(queryString);
-    console.log("✅ ticketId:", urlParams.get("ticketId")); // debug line
-
-    setTicketId(urlParams.get("ticketId"));
-    setIsClose(urlParams.get("isClose") === "true");
+      setTicketId(urlParams.get("ticketId"));
+      setIsClose(urlParams.get("isClose") === "true");
+      console.log("🟢 Initialized with:", {
+        ticketId: urlParams.get("ticketId"),
+        isClose: urlParams.get("isClose")
+      });
+    });
   }, []);
 
-
   const submitComment = () => {
-    dialog.url.submit({ ticketId, comment, isClose });
+    console.log("🟢 Submit clicked", { ticketId, comment, isClose });
+
+    try {
+      dialog.url.submit({ ticketId, comment, isClose });
+      console.log("✅ dialog.url.submit executed");
+    } catch (err) {
+      console.error("❌ dialog.url.submit failed:", err);
+    }
   };
 
   if (!ticketId) return <p>Loading ticket...</p>;
