@@ -53,21 +53,27 @@ export default function TicketsTab() {
 
 
   function openCommentModal(ticketId, isClose = false) {
-    tasks.startTask({
-      title: isClose ? "Close ticket" : "Add Comment",
+    const taskInfo = {
+      title: isClose ? "Close Ticket" : "Add Comment",
       height: 350,
       width: 400,
       url: `${window.location.origin}/api/tabs/#/comment?ticketId=${ticketId}&isClose=${isClose}`
-    }, async (result) => {
-      console.log("📤 Raw dialog result:", result);
-      console.log("🧪 Type check:", typeof result, Array.isArray(result));
-      if (result) {
-        console.log("✅ Proceeding with result:", result);
+    };
 
-        const ticketId = result.ticketId || result.id;
-        const comment = result.comment || result.message;
-        const isClose = result.isClose ?? result.close ?? false;
+    tasks.startTask(taskInfo, async (rawResult) => {
+      console.log("📤 Raw dialog result:", rawResult);
+      console.log("🧪 Type check:", typeof rawResult, Array.isArray(rawResult));
 
+      let result;
+      try {
+        result = typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
+      } catch (e) {
+        console.error("❌ Failed to parse result:", e);
+        return;
+      }
+
+      if (result?.ticketId) {
+        const { ticketId, comment, isClose } = result;
         const endpoint = isClose
           ? `/api/tickets/${ticketId}/close`
           : `/api/tickets/${ticketId}/comment`;
@@ -87,11 +93,10 @@ export default function TicketsTab() {
           console.error(err);
         }
       } else {
-        console.warn("⚠️ No result received from modal.");
+        console.warn("⚠️ Result missing ticketId:", result);
       }
     });
   }
-
 
   if (loading) return <p>Loading...</p>;
 
