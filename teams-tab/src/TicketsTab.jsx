@@ -59,9 +59,15 @@ export default function TicketsTab() {
       width: 400,
       url: `${window.location.origin}/api/tabs/#/comment?ticketId=${ticketId}&isClose=${isClose}`
     }, async (result) => {
-      console.log("📤 Result received:", result);
-      if (result?.ticketId) {
-        const { ticketId, comment, isClose } = result;
+      console.log("📤 Raw dialog result:", result);
+      console.log("🧪 Type check:", typeof result, Array.isArray(result));
+      if (result) {
+        console.log("✅ Proceeding with result:", result);
+
+        const ticketId = result.ticketId || result.id;
+        const comment = result.comment || result.message;
+        const isClose = result.isClose ?? result.close ?? false;
+
         const endpoint = isClose
           ? `/api/tickets/${ticketId}/close`
           : `/api/tickets/${ticketId}/comment`;
@@ -80,6 +86,8 @@ export default function TicketsTab() {
           alert(`❌ Error while ${isClose ? "closing" : "updating"} the ticket.`);
           console.error(err);
         }
+      } else {
+        console.warn("⚠️ No result received from modal.");
       }
     });
   }

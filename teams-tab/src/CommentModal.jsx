@@ -27,12 +27,15 @@ export default function CommentModal() {
 
   const submitComment = () => {
     console.log("🟢 Submit clicked", { ticketId, comment, isClose });
-
     try {
-      tasks.submitTask({ ticketId, comment, isClose }); 
-      console.log("✅ dialog.url.submit executed");
+      tasks.submitTask({
+        ticketId,
+        comment,
+        isClose
+    });
+    console.log("✅ Task submit executed");
     } catch (err) {
-      console.error("❌ dialog.url.submit failed:", err);
+      console.error("❌ Task submit failed:", err);
     }
   };
 
