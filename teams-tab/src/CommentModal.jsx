@@ -12,6 +12,10 @@ export default function CommentModal() {
       const queryString = hash.includes('?') ? hash.split('?')[1] : '';
       const urlParams = new URLSearchParams(queryString);
 
+      app.getContext().then((context) => {
+        console.log("🧠 Teams context:", context);
+      });
+
       setTicketId(urlParams.get("ticketId"));
       setIsClose(urlParams.get("isClose") === "true");
       console.log("🟢 Initialized with:", {

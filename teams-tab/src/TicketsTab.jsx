@@ -56,7 +56,7 @@ export default function TicketsTab() {
       url: `${window.location.origin}/api/tabs/#/comment?ticketId=${ticketId}&isClose=${isClose}`, // <== add "/#/"
       title: isClose ? "Close ticket" : "Add Comment",
       size: { width: 400, height: 350 },
-      completionBotId: "00000000-0000-0000-0000-000000000000"
+      completionBotId: "6bfe8329-9e6d-4228-88b8-8020746d7ac1"
     }, async (result) => {
       console.log("📤 Submitting result:", result);
       if (result?.ticketId) {
