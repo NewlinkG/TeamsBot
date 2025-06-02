@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { dialog, app } from "@microsoft/teams-js";
+import { tasks, app } from "@microsoft/teams-js";
 
 export default function CommentModal() {
   const [comment, setComment] = useState("");
@@ -29,7 +29,7 @@ export default function CommentModal() {
     console.log("🟢 Submit clicked", { ticketId, comment, isClose });
 
     try {
-      dialog.url.submit({ ticketId, comment, isClose });
+      tasks.submitTask({ ticketId, comment, isClose }); 
       console.log("✅ dialog.url.submit executed");
     } catch (err) {
       console.error("❌ dialog.url.submit failed:", err);
