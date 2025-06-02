@@ -7,6 +7,11 @@ module.exports = async function (context, req) {
   const token = await creds.getToken();
   const openOnly = req.query.openOnly !== 'false';
 
+  console.log("🚀 Function triggered");
+  console.log("🔗 Method:", req.method);
+  console.log("📦 Path params:", req.params);
+  console.log("📬 Body:", req.body);
+
   if (method === 'get') {
     const email = req.query.email;
     if (!email) {
