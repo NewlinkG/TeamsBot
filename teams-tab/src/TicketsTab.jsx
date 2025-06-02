@@ -57,6 +57,7 @@ export default function TicketsTab() {
       title: isClose ? "Close ticket" : "Add Comment",
       size: { width: 400, height: 350 }
     }, async (result) => {
+      console.log("📤 Submitting result:", result);
       if (result?.ticketId) {
         const { ticketId, comment, isClose } = result;
         const endpoint = isClose
