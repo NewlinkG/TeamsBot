@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { dialog, app } from "@microsoft/teams-js";
+import { app, tasks } from "@microsoft/teams-js";
 import axios from "axios";
 
 export default function TicketsTab() {
@@ -51,21 +51,24 @@ export default function TicketsTab() {
     setLoading(false);
   }
 
+
   function openCommentModal(ticketId, isClose = false) {
-    dialog.url.open({
-      url: `${window.location.origin}/api/tabs/#/comment?ticketId=${ticketId}&isClose=${isClose}`, // <== add "/#/"
+    tasks.startTask({
       title: isClose ? "Close ticket" : "Add Comment",
-      size: { width: 400, height: 350 },
-      completionBotId: "6bfe8329-9e6d-4228-88b8-8020746d7ac1"
+      height: 350,
+      width: 400,
+      url: `${window.location.origin}/api/tabs/#/comment?ticketId=${ticketId}&isClose=${isClose}`
     }, async (result) => {
-      console.log("📤 Submitting result:", result);
+      console.log("📤 Result received:", result);
       if (result?.ticketId) {
         const { ticketId, comment, isClose } = result;
         const endpoint = isClose
           ? `/api/tickets/${ticketId}/close`
           : `/api/tickets/${ticketId}/comment`;
+
         console.log("📦 Submitting to:", endpoint);
         console.log("📨 Payload:", { email, comment });
+
         try {
           await axios.post(endpoint, {
             email,
@@ -80,6 +83,7 @@ export default function TicketsTab() {
       }
     });
   }
+
 
   if (loading) return <p>Loading...</p>;
 

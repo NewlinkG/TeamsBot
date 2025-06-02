@@ -40,12 +40,13 @@ export default function CommentModal() {
 
   return (
     <div style={{ padding: "1rem", fontFamily: "Segoe UI" }}>
-      <h3>{isClose ? "Cerrar Ticket" : "Agregar Comentario"} #{ticketId}</h3>
+      <h3>{isClose ? "Close Ticket" : "Add Comment"} #{ticketId}</h3>
       <textarea
+        autoFocus
         style={{ width: "100%", height: "120px" }}
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="Escribí tu comentario..."
+        placeholder="Please add a comment..."
       />
       <br />
       <button onClick={submitComment}>Enviar</button>
