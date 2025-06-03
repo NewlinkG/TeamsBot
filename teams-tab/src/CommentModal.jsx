@@ -28,11 +28,13 @@ export default function CommentModal() {
   const submitComment = () => {
     console.log("🟢 Submit clicked", { ticketId, comment, isClose });
     try {
-      tasks.submitTask(JSON.stringify({
+      const payload = {
         ticketId,
         comment,
         isClose
-      }));
+        };
+    console.log("📦 Submitting payload:", payload);
+    tasks.submitTask(JSON.stringify(payload));
     console.log("✅ Task submit executed");
     } catch (err) {
       console.error("❌ Task submit failed:", err);

@@ -66,7 +66,17 @@ export default function TicketsTab() {
 
       let result;
       try {
-        result = typeof rawResult === "string" ? JSON.parse(rawResult) : rawResult;
+        if (typeof rawResult === "string") {
+          try {
+            result = JSON.parse(rawResult);
+          } catch (e) {
+            console.error("❌ Could not parse rawResult:", rawResult);
+            return;
+          }
+        } else {
+          result = rawResult;
+        }
+        console.log("✅ Parsed dialog result:", result);
       } catch (e) {
         console.error("❌ Failed to parse result:", e);
         return;
