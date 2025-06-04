@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const HELP_DESK_URL      = process.env.HELPDESK_API_URL;
 const HELP_DESK_TOKEN    = process.env.HELPDESK_TOKEN;
-const HELP_DESK_GROUP_ID = process.env.HELPESK_DEFAULT_GROUP || '1';
+const HELP_DESK_GROUP_ID = process.env.HELPDESK_DEFAULT_GROUP || '1';
 
 if (!HELP_DESK_URL || !HELP_DESK_TOKEN) {
   throw new Error(

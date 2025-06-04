@@ -85,7 +85,7 @@ PING_URL=
 # Helpdesk Integration
 HELPDESK_API_URL=
 HELPDESK_TOKEN=
-HELPESK_DEFAULT_GROUP=
+HELPDESK_DEFAULT_GROUP=
 HELPDESK_WEB_URL=
 HELPDESK_WEBHOOK_SECRET=        # Secret for validating Zammad webhook calls
 
@@ -259,7 +259,7 @@ flowchart TD
   - Handed off to `formatTicketUpdate.js` to build Adaptive Cards for proactive notifications.
 
 - **tabs-portal/**  
-  - React application built with Vite.  
+  - React application built with Create React App.
   - Responsive design fully integrated into Teams.  
   - Hosted as static content in Azure Storage.
 
