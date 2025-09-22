@@ -8,7 +8,7 @@
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
     "openai": "^4.96.2",
-    "@notionhq/client": "^3.0.0",
+    "@notionhq/client": "^5.1.0",
     "@azure/storage-blob": "^12.14.0",
     "@azure/cognitiveservices-computervision": "^8.2.0",
     "@azure/ms-rest-js": "^2.4.2",
