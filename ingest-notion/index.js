@@ -37,7 +37,12 @@ module.exports = async function (context, myTimer) {
     const EXTRACTED_CONTAINER = E('BLOB_EXTRACTED_NAME');
 
     // Clients
-    const notion = new NotionClient({ auth: NOTION_TOKEN });
+    const notion = new NotionClient({
+      auth: NOTION_TOKEN,
+      // Fuerza el modelo nuevo (databases + data sources)
+      notionVersion: '2025-09-03'
+    });
+
     const blobSvc = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONN);
     const rawContainer = blobSvc.getContainerClient(RAW_CONTAINER);
     await rawContainer.createIfNotExists();
@@ -58,10 +63,43 @@ module.exports = async function (context, myTimer) {
     });
 
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
-    const pineIndex = pinecone.Index(PINECONE_INDEX_NAME).namespace('notion');;
+    const pineIndex = pinecone.Index(PINECONE_INDEX_NAME).namespace('notion');
 
     const diClient = DocumentIntelligenceClient(DI_ENDPOINT, new AzureKeyCredential(DI_KEY));
     const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+    // ==== NUEVO: helpers para data sources (API 2025-09-03) ====
+    // Obtiene la lista de data_source_id para un database
+    async function getDataSourceIdsForDatabase(database_id) {
+      const db = await notion.databases.retrieve({ database_id });
+      const list = Array.isArray(db.data_sources) ? db.data_sources : [];
+      return list.map(ds => ds.id);
+    }
+
+    // Itera todas las páginas de un data source con paginación
+    async function* queryAllPagesInDataSource(data_source_id, baseBody = {}) {
+      let cursor;
+      do {
+        const resp = await notion.request({
+          method: 'POST',
+          path: `data_sources/${data_source_id}/query`,
+          body: { ...baseBody, start_cursor: cursor }
+        });
+        for (const item of resp.results || []) yield item;
+        cursor = resp?.has_more ? resp.next_cursor : undefined;
+      } while (cursor);
+    }
+
+    // Reemplazo del viejo databases.query: recorre todos los data sources de un database
+    async function* queryAllPagesInDatabase(database_id, baseBody = {}) {
+      const dsIds = await getDataSourceIdsForDatabase(database_id);
+      for (const dsid of dsIds) {
+        for await (const item of queryAllPagesInDataSource(dsid, baseBody)) {
+          yield item;
+        }
+      }
+    }
+    // ===========================================================
 
     function extractTitle(properties = {}) {
       const titleProp = Object.values(properties)
@@ -115,6 +153,7 @@ module.exports = async function (context, myTimer) {
       } while (cursor);
       return acc;
     }
+
     async function walk(id) {
       if (seen.has(id)) return;
       seen.add(id); toProcess.push(id);
@@ -122,19 +161,19 @@ module.exports = async function (context, myTimer) {
       do {
         const resp = await notion.blocks.children.list({ block_id: id, start_cursor: cursor, page_size: 100 });
         for (const b of resp.results) {
-          if (b.type === 'child_page') await walk(b.id);
-          else if (b.type === 'child_database') {
-            let dbCur;
-            do {
-              const qr = await notion.databases.query({ database_id: b.id, start_cursor: dbCur, page_size: 100 });
-              for (const e of qr.results) await walk(e.id);
-              dbCur = qr.has_more ? qr.next_cursor : undefined;
-            } while (dbCur);
+          if (b.type === 'child_page') {
+            await walk(b.id);
+          } else if (b.type === 'child_database') {
+            // ==== CAMBIO: en lugar de databases.query, recorremos todos los data sources ====
+            for await (const e of queryAllPagesInDatabase(b.id, { page_size: 100 })) {
+              await walk(e.id);
+            }
           }
         }
         cursor = resp.has_more ? resp.next_cursor : undefined;
       } while (cursor);
     }
+
     async function discoverAllAccessibleRoots() {
       let cursor;
       do {
@@ -142,6 +181,12 @@ module.exports = async function (context, myTimer) {
         for (const result of resp.results) {
           if ((result.object === 'page' || result.object === 'database') && result.id) {
             await walk(result.id);
+          }
+          // Opcional: si search devuelve data_source, también lo recorremos
+          if (result.object === 'data_source' && result.id) {
+            for await (const e of queryAllPagesInDataSource(result.id, { page_size: 100 })) {
+              await walk(e.id);
+            }
           }
         }
         cursor = resp.has_more ? resp.next_cursor : undefined;
@@ -422,7 +467,7 @@ module.exports = async function (context, myTimer) {
         if (records.length) await pineIndex.upsert(records);
 
         // record last sync time (metadata only needs lastedited; recordIds live in content)
-        const newMeta = { [lastKey]: pageMeta.last_edited_time, recordIds };
+        const newMeta = { lastedited: pageMeta.last_edited_time, recordIds };
         const buf = Buffer.from(JSON.stringify(newMeta), 'utf8');
         await rawContainer
           .getBlockBlobClient(`page-${pid}.json`)
