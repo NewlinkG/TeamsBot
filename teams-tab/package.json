@@ -1,6 +1,6 @@
 {
   "name": "teams-tab",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "private": true,
   "homepage": "/api/tabs",
   "dependencies": {
