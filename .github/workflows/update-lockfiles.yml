@@ -1,0 +1,38 @@
+name: Update lockfiles (apply overrides)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'package.json'
+      - 'teams-tab/package.json'
+
+jobs:
+  update-root:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm i --package-lock-only
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore(root): refresh package-lock.json to apply overrides'
+
+  update-teams-tab:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: teams-tab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'teams-tab/package-lock.json'
+      - run: npm i --package-lock-only
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore(teams-tab): refresh package-lock.json to apply overrides'
